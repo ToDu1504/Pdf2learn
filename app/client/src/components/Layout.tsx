@@ -1,8 +1,6 @@
 import { Suspense, useEffect, useState } from "react";
-import { Link, NavLink, Outlet, useNavigate } from "react-router-dom";
-import { useQueryClient } from "@tanstack/react-query";
-import { BarChart3, House, Layers, LogOut, Menu, PanelLeftClose, PanelLeftOpen, Settings, X } from "lucide-react";
-import { useAuth } from "../stores/auth";
+import { Link, NavLink, Outlet } from "react-router-dom";
+import { BarChart3, House, Layers, Menu, PanelLeftClose, PanelLeftOpen, Settings, X } from "lucide-react";
 import { useThemeSync } from "../hooks/useTheme";
 import { useOverview } from "../api/queries";
 import { cn, IconButton, Spinner } from "./ui";
@@ -37,10 +35,6 @@ const SIDEBAR_KEY = "pdf2learn-sidebar-collapsed";
 
 export function AppLayout() {
   useThemeSync();
-  const user = useAuth((s) => s.user);
-  const logout = useAuth((s) => s.logout);
-  const qc = useQueryClient();
-  const navigate = useNavigate();
   const [open, setOpen] = useState(false);
   // Sidebar thu gọn (chỉ còn icon) — nhớ lựa chọn theo trình duyệt.
   const [collapsed, setCollapsed] = useState(() => {
@@ -57,12 +51,6 @@ export function AppLayout() {
       /* private mode */
     }
   }, [collapsed]);
-
-  const signOut = () => {
-    logout();
-    qc.clear();
-    navigate("/login");
-  };
 
   const due = useOverview().data?.dueCards ?? 0;
 
@@ -120,21 +108,6 @@ export function AppLayout() {
           </IconButton>
         </div>
         {nav(collapsed)}
-        <div className={cn("mt-auto", collapsed ? "flex justify-center" : "px-3")}>
-          {!collapsed && (
-            <>
-              <p className="truncate text-[13px] font-medium">{user?.full_name}</p>
-              <p className="truncate text-[12px] text-slate-500">{user?.email}</p>
-            </>
-          )}
-          <button
-            className={cn("flex items-center gap-2 text-[13px] text-slate-500 hover:text-slate-900 dark:hover:text-white", !collapsed && "mt-3")}
-            onClick={signOut}
-            title="Đăng xuất"
-          >
-            <LogOut className="size-4" strokeWidth={1.75} /> {!collapsed && "Đăng xuất"}
-          </button>
-        </div>
       </aside>
 
       <header className="sticky top-0 z-30 flex h-13 items-center justify-between border-b border-black/[0.06] bg-white/75 px-4 backdrop-blur-xl lg:hidden dark:border-white/[0.08] dark:bg-black/70">
@@ -146,9 +119,6 @@ export function AppLayout() {
       {open && (
         <div className="fixed inset-x-0 top-13 z-30 border-b border-black/[0.06] bg-white/95 p-3 backdrop-blur-xl lg:hidden dark:bg-black/90">
           {nav(false)}
-          <button className="mt-2 flex w-full items-center gap-3 rounded-lg px-3 py-2 text-[14px] text-slate-500" onClick={signOut}>
-            <LogOut className="size-[18px]" strokeWidth={1.75} /> Đăng xuất
-          </button>
         </div>
       )}
 

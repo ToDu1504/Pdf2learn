@@ -1,25 +1,8 @@
 import axios, { AxiosError } from "axios";
 import { fetchEventSource } from "@microsoft/fetch-event-source";
-import { useAuth } from "../stores/auth";
 
+/** App desktop: server chạy cùng máy, không có đăng nhập. */
 export const http = axios.create({ baseURL: "/api/v1" });
-
-http.interceptors.request.use((config) => {
-  const token = useAuth.getState().token;
-  if (token) config.headers.Authorization = `Bearer ${token}`;
-  return config;
-});
-
-http.interceptors.response.use(
-  (r) => r,
-  (err: AxiosError) => {
-    if (err.response?.status === 401 && useAuth.getState().token) {
-      useAuth.getState().logout();
-      window.location.assign("/login");
-    }
-    return Promise.reject(err);
-  },
-);
 
 export function errorMessage(err: unknown, fallback = "Đã có lỗi xảy ra"): string {
   if (err instanceof AxiosError) {
@@ -31,10 +14,8 @@ export function errorMessage(err: unknown, fallback = "Đã có lỗi xảy ra")
   return fallback;
 }
 
-export const authHeader = (): Record<string, string> => {
-  const token = useAuth.getState().token;
-  return token ? { Authorization: `Bearer ${token}` } : {};
-};
+/** Không có đăng nhập: không cần header xác thực (giữ hàm để code dùng chung với bản web). */
+export const authHeader = (): Record<string, string> => ({});
 
 /** POST trả về luồng SSE (gia sư AI). EventSource gốc không POST/không gửi header được nên dùng fetch-event-source. */
 export async function postStream<E>(path: string, body: unknown, onEvent: (e: E) => void, signal?: AbortSignal) {

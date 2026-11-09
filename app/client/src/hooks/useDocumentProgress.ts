@@ -1,19 +1,17 @@
 import { useEffect, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { useAuth } from "../stores/auth";
 import type { DocumentStatus } from "../types";
 
 export type Progress = { status: DocumentStatus; progress: number; step: string | null; error?: string | null };
 
-/** Theo dõi tiến độ xử lý qua SSE. EventSource không gửi header nên truyền token qua query. */
+/** Theo dõi tiến độ xử lý qua SSE. */
 export function useDocumentProgress(documentId: number, enabled: boolean) {
-  const token = useAuth((s) => s.token);
   const qc = useQueryClient();
   const [progress, setProgress] = useState<Progress | null>(null);
 
   useEffect(() => {
-    if (!enabled || !token) return;
-    const es = new EventSource(`/api/v1/documents/${documentId}/progress?token=${encodeURIComponent(token)}`);
+    if (!enabled) return;
+    const es = new EventSource(`/api/v1/documents/${documentId}/progress`);
     let lastChapterStep = "";
     es.onmessage = (ev) => {
       const data = JSON.parse(ev.data) as Progress;
@@ -30,7 +28,7 @@ export function useDocumentProgress(documentId: number, enabled: boolean) {
       }
     };
     return () => es.close();
-  }, [documentId, enabled, token, qc]);
+  }, [documentId, enabled, qc]);
 
   return progress;
 }

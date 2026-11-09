@@ -4,5 +4,6 @@ import tailwindcss from "@tailwindcss/vite";
 
 export default defineConfig({
   plugins: [react(), tailwindcss()],
-  server: { proxy: { "/api": "http://localhost:5000" } },
+  // Chạy thử giao diện app: cổng 5174, gọi server của app ở cổng 5100 (bản web dùng 5173 / 5000).
+  server: { port: 5174, proxy: { "/api": "http://127.0.0.1:5100" } },
 });

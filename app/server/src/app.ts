@@ -1,4 +1,7 @@
 import express from "express";
+import { existsSync } from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import cors from "cors";
 import { env } from "./config/env.js";
 import { sequelize } from "./config/db.js";
@@ -26,6 +29,14 @@ app.use("/api/v1", api);
 app.use("/api", (_req, res) => res.status(404).json({ error: "Không tìm thấy endpoint" }));
 app.use(errorHandler);
 
+// App desktop: server phục vụ luôn giao diện đã build (app/client/dist) cùng địa chỉ với /api → giao diện gọi
+// "/api/v1" như cũ. Mọi đường dẫn khác trả index.html (giao diện tự định tuyến).
+const CLIENT_DIST = process.env.CLIENT_DIST ?? path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../client/dist");
+if (existsSync(path.join(CLIENT_DIST, "index.html"))) {
+  app.use(express.static(CLIENT_DIST, { index: false, maxAge: "1h" }));
+  app.get(/^(?!\/api\/).*/, (_req, res) => res.sendFile(path.join(CLIENT_DIST, "index.html")));
+}
+
 async function start() {
   try {
     await sequelize.authenticate();
@@ -39,7 +50,8 @@ async function start() {
   // Chỉ chạy job nền khi đã giữ được cổng: nếu đã có 1 server khác chạy (cổng bận) thì thoát,
   // tránh 2 tiến trình cùng xử lý 1 tài liệu và ghi trùng dữ liệu.
   await new Promise<void>((resolve) => {
-    const server = app.listen(env.PORT, () => resolve());
+    // Chỉ nghe trên máy này: máy khác trong mạng không truy cập được.
+    const server = app.listen(env.PORT, "127.0.0.1", () => resolve());
     server.on("error", (err: NodeJS.ErrnoException) => {
       console.error(err.code === "EADDRINUSE" ? `[server] cổng ${env.PORT} đang bận (đã có server khác chạy), thoát.` : err);
       process.exit(1);

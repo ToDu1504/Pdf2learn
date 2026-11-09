@@ -3,8 +3,6 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 import { AppLayout } from "./components/Layout";
 import { Spinner, ConfirmDialog, Toaster } from "./components/ui";
-import { LoginPage, RegisterPage, RequireAuth } from "./features/auth/AuthPages";
-import { Landing } from "./pages/Landing";
 import { Dashboard } from "./pages/Dashboard";
 
 const DocumentPage = lazy(() => import("./pages/DocumentPage").then((m) => ({ default: m.DocumentPage })));
@@ -29,17 +27,9 @@ export default function App() {
       <BrowserRouter>
         <Suspense fallback={<div className="grid h-screen place-items-center"><Spinner /></div>}>
         <Routes>
-          <Route path="/" element={<Landing />} />
-          <Route path="/login" element={<LoginPage />} />
-          <Route path="/register" element={<RegisterPage />} />
-          <Route
-            path="/app"
-            element={
-              <RequireAuth>
-                <AppLayout />
-              </RequireAuth>
-            }
-          >
+          {/* App desktop: không có trang giới thiệu/đăng nhập — mở thẳng vào trang chủ học tập. */}
+          <Route path="/" element={<Navigate to="/app" replace />} />
+          <Route path="/app" element={<AppLayout />}>
             <Route index element={<Dashboard />} />
             <Route path="documents/:id" element={<DocumentPage />} />
             <Route path="documents/:id/tutor" element={<TutorPage />} />
@@ -49,7 +39,7 @@ export default function App() {
             <Route path="stats" element={<StatsPage />} />
             <Route path="settings" element={<SettingsPage />} />
           </Route>
-          <Route path="*" element={<Navigate to="/" replace />} />
+          <Route path="*" element={<Navigate to="/app" replace />} />
         </Routes>
         </Suspense>
       </BrowserRouter>

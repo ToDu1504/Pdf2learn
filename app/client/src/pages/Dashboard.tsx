@@ -9,7 +9,6 @@ import { toast } from "../stores/toast";
 import { ask } from "../stores/confirm";
 import { UploadZone } from "../features/documents/UploadZone";
 import { stepLabel } from "../hooks/useDocumentProgress";
-import { useAuth } from "../stores/auth";
 import type { DocumentItem } from "../types";
 
 export const STATUS: Record<DocumentItem["status"], { label: string; color: "slate" | "brand" | "green" | "red" }> = {
@@ -70,7 +69,6 @@ function Today() {
 }
 
 export function Dashboard() {
-  const user = useAuth((s) => s.user);
   const docs = useDocuments();
   const qc = useQueryClient();
   const removeDoc = async (d: DocumentItem) => {
@@ -94,7 +92,7 @@ export function Dashboard() {
   ];
 
   return (
-    <Page title={`Chào ${user?.full_name?.split(" ").at(-1) ?? "bạn"}.`}>
+    <Page title="Chào bạn.">
       <Today />
       <div className="mb-10 grid grid-cols-2 overflow-hidden rounded-2xl border border-black/[0.06] bg-white lg:grid-cols-4 dark:border-white/[0.08] dark:bg-slate-900">
         {stats.map((s, i) => {
