@@ -190,16 +190,26 @@ export function PdfViewer({
   const [zoom, setZoom] = useState(1);
   const [width, setWidth] = useState(560);
   const box = useRef<HTMLDivElement>(null);
+  const scrolledFor = useRef<string | null>(null);
 
   useEffect(() => {
     if (!box.current) return;
-    const ro = new ResizeObserver(([e]) => setWidth(Math.max(280, Math.floor(e.contentRect.width) - 32)));
+    // Bỏ qua thay đổi nhỏ (vd. thanh cuộn hiện/ẩn): nếu không, trang co lại → hết tràn → mất thanh cuộn → trang to ra
+    // → tràn lại… vẽ lại liên tục (nhấp nháy). Khung đã giữ sẵn chỗ cho thanh cuộn (scrollbar-gutter) nên hiếm khi xảy ra.
+    const ro = new ResizeObserver(([e]) => {
+      const next = Math.max(280, Math.floor(e.contentRect.width) - 32);
+      setWidth((w) => (Math.abs(next - w) < 24 ? w : next));
+    });
     ro.observe(box.current);
     return () => ro.disconnect();
   }, []);
   useEffect(() => {
     box.current?.scrollTo({ top: 0 });
   }, [range.from, range.to, mode]);
+  // Mỗi lần bấm dẫn chứng (range mới) thì được cuộn tới câu tô sáng lại 1 lần.
+  useEffect(() => {
+    scrolledFor.current = null;
+  }, [range]);
   // Esc: thu nhỏ khi đang mở rộng.
   useEffect(() => {
     if (!expanded) return;
@@ -266,7 +276,7 @@ export function PdfViewer({
         </Button>
       </div>
 
-      <div ref={box} className="flex-1 overflow-auto bg-slate-50 dark:bg-slate-950">
+      <div ref={box} className="flex-1 overflow-auto bg-slate-50 [scrollbar-gutter:stable] dark:bg-slate-950">
         {mode === "translation" && pdfTranslation ? (
           chunks.map((ps) => <TranslatedChunk key={ps[0]} documentId={documentId} pages={ps} width={Math.round(width * zoom)} onUnavailable={onUnavailable} />)
         ) : mode === "translation" ? (
@@ -289,8 +299,13 @@ export function PdfViewer({
                   loading={<div className="grid h-64 place-items-center"><Spinner /></div>}
                   customTextRenderer={highlight}
                   onRenderTextLayerSuccess={() => {
-                    if (!range.quote) return;
-                    box.current?.querySelector("mark.pdf-hl")?.scrollIntoView({ block: "center", behavior: "smooth" });
+                    // Cuộn tới câu được tô sáng MỘT lần cho mỗi dẫn chứng, chỉ trong khung PDF (không cuộn cả trang web).
+                    const el = box.current;
+                    const mark = el?.querySelector<HTMLElement>("mark.pdf-hl");
+                    if (!el || !mark || !range.quote || scrolledFor.current === range.quote) return;
+                    scrolledFor.current = range.quote;
+                    const top = mark.getBoundingClientRect().top - el.getBoundingClientRect().top + el.scrollTop - el.clientHeight / 3;
+                    el.scrollTo({ top: Math.max(0, top) });
                   }}
                 />
                 {pages.length > 1 && <p className="bg-slate-50 py-1 text-center text-[12px] text-slate-400 dark:bg-slate-950">Trang {p}</p>}
