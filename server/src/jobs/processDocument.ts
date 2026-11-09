@@ -9,6 +9,7 @@ import { detectChaptersWithAi } from "../services/ai/content.service.js";
 import { headText } from "../services/ai/source.js";
 import { analyzeFrom } from "../services/chapterAnalysis.service.js";
 import { buildBookReviews } from "../services/bookReview.service.js";
+import { kickAutoPrepare, kickAutoTranslate } from "../services/autoPrepare.service.js";
 import { jobRunner } from "./jobRunner.js";
 import { setProgress } from "./progressBus.js";
 
@@ -79,6 +80,9 @@ export async function processDocument(docId: number) {
     // Tóm tắt sẵn lô đầu tiên (không chặn; lỗi/hết lượt thì người học mở chương sẽ thấy và thử lại).
     const first = chapters.find((c) => c.status !== "done");
     if (first) analyzeFrom(doc, first.id).catch(() => {});
+    // Chuẩn bị trước ở nền: soạn các bài còn lại, dịch toàn bộ PDF (tắt được trong Cài đặt).
+    void kickAutoPrepare();
+    void kickAutoTranslate(doc).catch(() => {});
   } catch (err) {
     console.error(`[doc ${doc.id}]`, err);
     await setProgress(doc, { status: "failed", error_message: (err as Error).message.slice(0, 1000) });
@@ -169,6 +173,7 @@ export async function rebuildRoadmap(doc: Document) {
       await setProgress(doc, { status: "processing", current_step: "metadata", progress: 80, error_message: null });
       await buildRoadmap(doc, await readPdfMeta(pdfPath(doc.file_path)));
       await setProgress(doc, { status: "done", current_step: "done", progress: 100 });
+      void kickAutoPrepare();
     } catch (err) {
       console.error(`[roadmap ${doc.id}]`, err);
       // Roadmap cũ vẫn còn nguyên (saveRoadmap chạy trong transaction) → tài liệu vẫn dùng được.

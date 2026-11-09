@@ -61,7 +61,7 @@ const MODELS = [MODEL, ...env.GEMINI_FALLBACK_MODELS.split(",").map((m) => m.tri
 /** model → thời điểm có thể dùng lại (hạn mức ngày của Google reset lúc 0h giờ Thái Bình Dương). */
 const exhaustedUntil = new Map<string, number>();
 
-function nextQuotaReset() {
+export function nextQuotaReset() {
   const now = new Date();
   // 0h Pacific ≈ 08:00 UTC (giờ chuẩn) / 07:00 UTC (giờ mùa hè); lấy 08:00 UTC cho chắc.
   const reset = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 8, 5));

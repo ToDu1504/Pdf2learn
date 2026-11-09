@@ -150,6 +150,10 @@ export type Flashcard = {
 
 export type Settings = {
   theme: "light" | "dark" | "system";
+  /** Tự soạn trước mọi bài giảng ở nền. */
+  auto_prepare: boolean;
+  /** Tự dịch trước toàn bộ PDF ở nền. */
+  auto_translate: boolean;
 };
 
 export type TutorQuizItem = {

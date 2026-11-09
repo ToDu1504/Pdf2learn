@@ -47,11 +47,17 @@ export type Theme = "light" | "dark" | "system";
 export class UserSettings extends Model<InferAttributes<UserSettings>, InferCreationAttributes<UserSettings>> {
   declare user_id: number;
   declare theme: CreationOptional<Theme>;
+  /** Tự soạn trước mọi bài giảng ở nền (services/autoPrepare.service.ts). */
+  declare auto_prepare: CreationOptional<boolean>;
+  /** Tự dịch trước toàn bộ PDF ở nền. */
+  declare auto_translate: CreationOptional<boolean>;
 }
 UserSettings.init(
   {
     user_id: { type: DataTypes.INTEGER, primaryKey: true },
     theme: { type: DataTypes.ENUM("light", "dark", "system"), allowNull: false, defaultValue: "system" },
+    auto_prepare: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: true },
+    auto_translate: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: true },
   },
   { sequelize, tableName: "user_settings" },
 );

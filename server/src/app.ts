@@ -5,6 +5,7 @@ import { sequelize } from "./config/db.js";
 import { api } from "./routes/index.js";
 import { errorHandler } from "./middlewares/error.js";
 import { hashFile, resumePendingDocuments } from "./jobs/processDocument.js";
+import { startAutoPrepare } from "./services/autoPrepare.service.js";
 import { pdfPath } from "./middlewares/upload.js";
 import { Document } from "./models/index.js";
 
@@ -44,6 +45,7 @@ async function start() {
   await cleanupUploads().catch((err) => console.error("[cleanup]", err));
   await backfillFileHashes().catch((err) => console.error("[hash]", err));
   await resumePendingDocuments();
+  startAutoPrepare(); // tự soạn trước bài giảng + tự dịch trước PDF ở nền
 }
 
 if (process.env.NODE_ENV !== "test") void start();
