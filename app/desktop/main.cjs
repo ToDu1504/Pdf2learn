@@ -11,7 +11,8 @@
  *     con (Python, Chrome của engine dịch), không để sót.
  */
 const { app, BrowserWindow, Menu, Tray, nativeImage, shell, dialog, ipcMain, safeStorage } = require("electron");
-const { fork, execFileSync } = require("node:child_process");
+const { fork, execFileSync, spawn } = require("node:child_process");
+const crypto = require("node:crypto");
 const fs = require("node:fs");
 const net = require("node:net");
 const path = require("node:path");
@@ -312,6 +313,98 @@ ipcMain.handle("data-dir:choose", async () => {
   app.relaunch();
   app.exit(0);
   return { changed: true };
+});
+
+/* ---------------- gói dịch (VI-Translate + Python độc lập), cài từ file .zip ---------------- */
+
+const TRANSLATOR_DIR = path.join(DATA_DIR, "translator");
+const PACK_NAME = "pdf2learn-translator";
+// tar.exe của Windows giải nén được .zip (không dùng tar của Git: nó hiểu "D:" là máy từ xa).
+const TAR = path.join(process.env.SystemRoot || "C:\\Windows", "System32", "tar.exe");
+let installing = false;
+
+const sendProgress = (p) => win?.webContents.send("translator:progress", p);
+
+function sha256(file) {
+  return new Promise((resolve, reject) => {
+    const h = crypto.createHash("sha256");
+    fs.createReadStream(file).on("data", (d) => h.update(d)).on("end", () => resolve(h.digest("hex"))).on("error", reject);
+  });
+}
+
+/**
+ * Cài gói dịch từ file zip (tạo bằng app/scripts/build-translator-pack.mjs): kiểm tra sha256 nếu có file .sha256 đi kèm,
+ * giải nén vào thư mục tạm trong thư mục dữ liệu, kiểm tra có python.exe, rồi thay bản cũ. Server tự nhận ngay.
+ */
+async function installTranslatorFromZip(zip) {
+  if (installing) throw new Error("Đang cài gói dịch");
+  installing = true;
+  const tmp = path.join(TRANSLATOR_DIR, ".installing");
+  try {
+    const shaFile = `${zip}.sha256`;
+    if (fs.existsSync(shaFile)) {
+      sendProgress({ phase: "verify" });
+      const expected = fs.readFileSync(shaFile, "utf8").trim().split(/\s+/)[0].toLowerCase();
+      if ((await sha256(zip)) !== expected) throw new Error("File gói dịch bị hỏng (sai mã sha256). Hãy tải lại.");
+    }
+    fs.rmSync(tmp, { recursive: true, force: true });
+    fs.mkdirSync(tmp, { recursive: true });
+    sendProgress({ phase: "extract", files: 0 });
+    await new Promise((resolve, reject) => {
+      const p = spawn(TAR, ["-xvf", zip, "-C", tmp], { windowsHide: true });
+      let files = 0;
+      let last = 0;
+      const tick = (b) => {
+        files += String(b).split("\n").length - 1;
+        if (Date.now() - last > 300) {
+          last = Date.now();
+          sendProgress({ phase: "extract", files });
+        }
+      };
+      p.stdout.on("data", tick);
+      p.stderr.on("data", tick);
+      p.on("error", reject);
+      p.on("exit", (code) => (code === 0 ? resolve() : reject(new Error(`Giải nén lỗi (mã ${code})`))));
+    });
+    const extracted = path.join(tmp, PACK_NAME);
+    if (!fs.existsSync(path.join(extracted, "python", "python.exe"))) throw new Error("File zip không phải gói dịch của Pdf2Learn");
+    sendProgress({ phase: "finish" });
+    fs.rmSync(path.join(TRANSLATOR_DIR, PACK_NAME), { recursive: true, force: true });
+    fs.renameSync(extracted, path.join(TRANSLATOR_DIR, PACK_NAME));
+    sendProgress({ phase: "done" });
+    return JSON.parse(fs.readFileSync(path.join(TRANSLATOR_DIR, PACK_NAME, "pack.json"), "utf8"));
+  } finally {
+    fs.rmSync(tmp, { recursive: true, force: true });
+    installing = false;
+  }
+}
+
+ipcMain.handle("translator:install-file", async (_e, zipPath) => {
+  let zip = zipPath;
+  if (!zip) {
+    const pick = await dialog.showOpenDialog(win ?? undefined, {
+      title: "Chọn file gói dịch (pdf2learn-translator-*.zip)",
+      filters: [{ name: "Gói dịch Pdf2Learn", extensions: ["zip"] }],
+      properties: ["openFile"],
+    });
+    if (pick.canceled || !pick.filePaths[0]) return { installed: false };
+    zip = pick.filePaths[0];
+  }
+  try {
+    return { installed: true, pack: await installTranslatorFromZip(zip) };
+  } catch (err) {
+    sendProgress({ phase: "error", error: err.message });
+    return { installed: false, error: err.message };
+  }
+});
+
+ipcMain.handle("translator:remove", async () => {
+  try {
+    fs.rmSync(path.join(TRANSLATOR_DIR, PACK_NAME), { recursive: true, force: true });
+    return { removed: true };
+  } catch (err) {
+    return { removed: false, error: `Không gỡ được (có thể đang dịch dở): ${err.message}` };
+  }
 });
 
 /* ---------------- vòng đời ---------------- */

@@ -3,6 +3,7 @@ import { readFile, rename, unlink } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
+import { translatorPaths } from "./translate/translatorPaths.js";
 import { PDFDocument } from "pdf-lib";
 import { getDocument } from "pdfjs-dist/legacy/build/pdf.mjs";
 
@@ -28,12 +29,16 @@ export async function ensureEditablePdf(filePath: string) {
   } catch {
     const tmp = `${filePath}.repair.pdf`;
     try {
-      await promisify(execFile)("uv", ["run", "--quiet", "--with", "pikepdf", "python", REPAIR_SCRIPT, filePath, tmp], {
-        timeout: 10 * 60 * 1000,
-        windowsHide: true,
-        // Trên Windows, uv là uv.exe trong PATH người dùng: chạy qua shell để tìm được.
-        shell: process.platform === "win32",
-      });
+      // Gói dịch có sẵn Python + pikepdf; không có thì dùng uv (máy phát triển).
+      const pack = translatorPaths();
+      if (pack) await promisify(execFile)(pack.python, ["-I", REPAIR_SCRIPT, filePath, tmp], { timeout: 10 * 60 * 1000, windowsHide: true });
+      else
+        await promisify(execFile)("uv", ["run", "--quiet", "--with", "pikepdf", "python", REPAIR_SCRIPT, filePath, tmp], {
+          timeout: 10 * 60 * 1000,
+          windowsHide: true,
+          // Trên Windows, uv là uv.exe trong PATH người dùng: chạy qua shell để tìm được.
+          shell: process.platform === "win32",
+        });
       await loadForEdit(tmp); // kiểm tra bản đã sửa đọc được thật
       await rename(tmp, filePath);
       console.log(`[pdf] đã sửa cấu trúc ${path.basename(filePath)}`);

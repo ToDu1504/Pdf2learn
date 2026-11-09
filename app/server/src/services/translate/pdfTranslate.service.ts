@@ -9,6 +9,7 @@ import { pdfPath } from "../../middlewares/upload.js";
 import type { Document } from "../../models/index.js";
 import { translateSegments } from "./segmentTranslator.js";
 import { track } from "../../utils/children.js";
+import { translatorPaths } from "./translatorPaths.js";
 
 /**
  * Dịch PDF sang tiếng Việt GIỮ NGUYÊN BỐ CỤC bằng VI-Translate (https://github.com/breslee1707/VI-Translate,
@@ -23,9 +24,12 @@ import { track } from "../../utils/children.js";
  */
 
 export const CHUNK = 10;
-const ROOT = path.resolve(env.VI_TRANSLATE_DIR);
-const PYTHON = path.join(ROOT, ".venv", process.platform === "win32" ? "Scripts/python.exe" : "bin/python");
-const CLI = path.join(ROOT, "scripts", "translate_pdf.py");
+// Đường dẫn engine tính lại mỗi lần (gói dịch cài/gỡ khi đang chạy): xem translatorPaths.ts.
+const tp = () => {
+  const p = translatorPaths();
+  if (!p) throw new Error("Chưa cài gói dịch (Cài đặt → Gói dịch).");
+  return p;
+};
 const CHUNK_SCRIPT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../../scripts/pdf_chunk.py");
 const MERGE_SCRIPT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../../scripts/pdf_merge.py");
 const PY_HOOKS = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../../scripts/pyhooks");
@@ -33,7 +37,10 @@ const OUT_DIR = path.resolve(env.UPLOAD_DIR, "translated");
 const TIMEOUT_MS = 20 * 60_000; // gồm cả thời gian chờ người dùng giải CAPTCHA (engine chờ tối đa 10 phút)
 const run = promisify(execFile);
 
-export const isPdfTranslatorInstalled = () => existsSync(PYTHON) && existsSync(CLI);
+export const isPdfTranslatorInstalled = () => {
+  const p = translatorPaths();
+  return !!p && existsSync(p.cli);
+};
 
 export type ChunkPhase = "queued" | "extracting" | "translating" | "building" | "ready" | "error";
 export type ChunkStatus = {
@@ -65,9 +72,9 @@ function bounds(doc: Document, chunk: number) {
   return { from, to: Math.min(from + CHUNK - 1, doc.page_count ?? from + CHUNK - 1) };
 }
 
-/** Engine ghi cache, model, hồ sơ trình duyệt vào thư mục home: trỏ sang vi-translate/.home để không chiếm ổ C. */
+/** Engine ghi cache, model, hồ sơ trình duyệt vào thư mục home: trỏ vào gói dịch (thư mục dữ liệu) để không chiếm ổ C. */
 function pyEnv() {
-  const home = path.join(ROOT, ".home");
+  const { home, root } = tp();
   return {
     ...process.env,
     USERPROFILE: home,
@@ -76,7 +83,7 @@ function pyEnv() {
     PYTHONUTF8: "1",
     // sitecustomize.py: mở Google Chrome thay vì trình duyệt mặc định (Edge) khi dịch qua trình duyệt.
     PYTHONPATH: PY_HOOKS,
-    VI_TRANSLATE_ROOT: ROOT,
+    VI_TRANSLATE_ROOT: root,
     PDF2LEARN_BROWSER: env.TRANSLATE_BROWSER,
   };
 }
@@ -85,7 +92,7 @@ const errorLine = (out: string) => out.split(/\r?\n/).find((l) => l.startsWith("
 
 async function py(args: string[]) {
   try {
-    const p = run(PYTHON, args, { env: pyEnv(), maxBuffer: 32 * 1024 * 1024, timeout: TIMEOUT_MS, windowsHide: true });
+    const p = run(tp().python, args, { env: pyEnv(), maxBuffer: 32 * 1024 * 1024, timeout: TIMEOUT_MS, windowsHide: true });
     track(p.child);
     return await p;
   } catch (err) {
@@ -97,7 +104,7 @@ async function py(args: string[]) {
 /** Chạy engine và đọc thanh tiến độ (tqdm "7/10 [") trên stderr để báo tiến độ theo trang. */
 function pyWithProgress(args: string[], onProgress: (done: number, total: number) => void) {
   return new Promise<void>((resolve, reject) => {
-    const child = track(spawn(PYTHON, args, { env: pyEnv(), windowsHide: true }));
+    const child = track(spawn(tp().python, args, { env: pyEnv(), windowsHide: true }));
     let out = "";
     const timer = setTimeout(() => child.kill(), TIMEOUT_MS);
     const read = (buf: Buffer) => {
@@ -124,7 +131,7 @@ const NOTHING_TO_TRANSLATE = /No text could be extracted|nothing to translate/i;
 async function viaBrowser(part: string, work: string, st: ChunkStatus) {
   st.phase = "translating";
   st.unit = "page";
-  await pyWithProgress([CLI, part, "--google-browser", "--output-dir", work, "--overwrite"], (done, total) =>
+  await pyWithProgress([tp().cli, part, "--google-browser", "--output-dir", work, "--overwrite"], (done, total) =>
     Object.assign(st, { done, total }),
   );
   return path.join(work, "part-vi.pdf");
@@ -136,7 +143,7 @@ async function viaHandoff(part: string, work: string, st: ChunkStatus, userId: n
   const trans = path.join(work, "translations.jsonl");
   st.phase = "extracting";
   Object.assign(st, { done: 0, total: 0, unit: "segment" });
-  await py([CLI, part, "--engine", "handoff", "--emit-segments", segs]);
+  await py([tp().cli, part, "--engine", "handoff", "--emit-segments", segs]);
   const srcs = existsSync(segs)
     ? (await readFile(segs, "utf8"))
         .split("\n")
@@ -150,7 +157,7 @@ async function viaHandoff(part: string, work: string, st: ChunkStatus, userId: n
   await writeFile(trans, [...map].map(([src, dst]) => JSON.stringify({ src, dst })).join("\n") + "\n", "utf8");
 
   st.phase = "building";
-  await py([CLI, part, "--engine", "handoff", "--segments", trans, "--emit-segments", path.join(work, "missing.jsonl"), "--output-dir", work, "--overwrite"]);
+  await py([tp().cli, part, "--engine", "handoff", "--segments", trans, "--emit-segments", path.join(work, "missing.jsonl"), "--output-dir", work, "--overwrite"]);
   return path.join(work, "part-vi.pdf");
 }
 

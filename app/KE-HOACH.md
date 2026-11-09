@@ -13,7 +13,7 @@ Cập nhật sau mỗi giai đoạn. Chi tiết từng giai đoạn ở mục 11
 | 3 | Bỏ đăng nhập, Express phục vụ giao diện | ✅ Xong (10/11): giao diện không còn trang giới thiệu/đăng nhập/đăng xuất, mở thẳng `/app`; server app phục vụ giao diện đã build và chỉ nghe trên 127.0.0.1:5100; chạy thử trang chủ, lộ trình, bài học + tô sáng PDF, flashcard, thống kê, cài đặt — không lỗi | (commit này) |
 | 4 | Electron: cửa sổ, khay hệ thống, dọn tiến trình | ✅ Xong (10/11): Electron 37 (Node 22.17); server chạy bằng Node của Electron, cổng ngẫu nhiên 127.0.0.1; đóng cửa sổ → khay; Thoát → tắt server + cả cây tiến trình; Electron chết đột ngột → server tự tắt sau ~1 giây; 1 phiên bản; không ghi gì ra ổ C (userData/cache/logs/temp → `data/electron`, `data/cache/tmp`) | (commit này) |
 | 5 | Màn hình lần đầu chạy + Cài đặt (API key mã hóa) | ✅ Xong (10/11): màn hình chào 2 bước (nơi lưu dữ liệu, Gemini key); key kiểm tra với Google (lời gọi xem model, không tốn lượt) rồi mã hóa bằng safeStorage vào `data/config.json`; đổi key/model khi đang chạy; Cài đặt có mục AI và Dữ liệu (mở thư mục, đổi thư mục kèm chép dữ liệu + khởi động lại). Đã thử trên thư mục trống: key sai báo lỗi, key đúng vào app, mở lại app không phải nhập lại | (commit này) |
-| 6 | Gói dịch tải khi cần | ⏳ Chưa làm | |
+| 6 | Gói dịch | 🟡 Gần xong (10/11): `node scripts/build-translator-pack.mjs` tạo `app/dist/pdf2learn-translator-1.0.0.zip` (365MB nén, 770MB cài, 28.504 file) + `.sha256`; Cài đặt → Gói dịch → "Cài từ file .zip" (kiểm tra sha256, giải nén vào `data/translator`, có tiến độ) — 19 giây; server nhận ngay; engine trong gói chạy độc lập (10 trang, 11 giây). **Còn thiếu:** tải gói từ Internet — cần đăng gói lên GitHub Releases (chờ bạn đồng ý) | (commit này) |
 | 7 | Đóng gói `.exe`, cài/gỡ | ⏳ Chưa làm | |
 
 **Ghi chú phát sinh**
@@ -22,6 +22,7 @@ Cập nhật sau mỗi giai đoạn. Chi tiết từng giai đoạn ở mục 11
 - Dữ liệu đã chuyển nằm ở `app/data/` (gitignored). Chạy lại script với `--replace` sẽ xóa dữ liệu app và chép lại từ MySQL.
 - Chạy app desktop khi phát triển: `cd app && npm run dev` (build giao diện rồi mở Electron) hoặc `npm start` (không build lại). Terminal của VS Code đặt sẵn `ELECTRON_RUN_AS_NODE=1` nên phải chạy qua `desktop/run.cjs` (script `start`/`dev` đã làm), không gọi thẳng `electron .`.
 - Biến chạy thử: `PDF2LEARN_NO_AUTO=1` (không soạn/dịch nền), `PDF2LEARN_QUIT_AFTER=<ms>` (tự gọi quy trình Thoát).
+- Gói dịch: `cd app && node scripts/build-translator-pack.mjs` (lấy Python + thư viện từ `vi-translate/.venv`, mô hình từ `vi-translate/.home`). File zip trong `app/dist/` (gitignored).
 - Electron tải bản cài vào `.cache/electron` (đặt `ELECTRON_CACHE`/`electron_config_cache` khi `npm install`), không vào ổ C.
 - Chạy thử không cần Electron: `cd app/client && npm run build`, rồi `cd app/server && npx tsx src/app.ts` → mở http://127.0.0.1:5100. Phát triển giao diện: `cd app/client && npx vite` → http://localhost:5174 (gọi server app ở 5100). Bản web vẫn ở 5000/5173.
 

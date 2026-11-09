@@ -7,6 +7,7 @@ import { applyTheme } from "../../hooks/useTheme";
 import type { Settings } from "../../types";
 import { Monitor, Moon, Sun } from "lucide-react";
 import { ApiKeyForm, DataDirControl } from "../onboarding/Welcome";
+import { TranslatorSection } from "./TranslatorSection";
 
 function Toggle({ checked, onChange, label, hint }: { checked: boolean; onChange: (v: boolean) => void; label: string; hint: string }) {
   return (
@@ -69,6 +70,10 @@ export function SettingsPage() {
 
         <Section title="Dữ liệu" desc="Nơi lưu cơ sở dữ liệu, PDF và bản dịch">
           <DataDirControl />
+        </Section>
+
+        <Section title="Gói dịch" desc="Dịch PDF sang tiếng Việt giữ nguyên bố cục">
+          <TranslatorSection />
         </Section>
 
         <Section title="Chuẩn bị trước" desc="Làm sẵn ở nền để mở bài nào cũng có ngay, không phải chờ">

@@ -184,4 +184,5 @@ export type AppConfig = {
   gemini_model: string;
   gemini_fallback_models: string;
   data_dir: string;
+  translator: { installed: false } | { installed: true; source: "pack" | "dev"; version: string | null; vi_translate_commit: string | null };
 };

@@ -2,6 +2,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { rename, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { env } from "./env.js";
+import { translatorInfo } from "../services/translate/translatorPaths.js";
 
 /**
  * Cấu hình của app desktop (thay cho file .env): data/config.json.
@@ -97,5 +98,7 @@ export function appConfigStatus() {
     gemini_model: env.GEMINI_MODEL,
     gemini_fallback_models: env.GEMINI_FALLBACK_MODELS,
     data_dir: env.DATA_DIR,
+    /** Gói dịch (dịch PDF giữ bố cục): đã cài chưa, phiên bản. */
+    translator: translatorInfo(),
   };
 }
