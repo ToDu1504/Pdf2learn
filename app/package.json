@@ -1,0 +1,16 @@
+{
+  "name": "pdf2learn-desktop",
+  "productName": "Pdf2Learn",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Pdf2Learn: học giáo trình PDF với lộ trình bám sát sách, bài giảng có kiểm chứng và bản dịch tiếng Việt",
+  "main": "desktop/main.cjs",
+  "scripts": {
+    "build:client": "npm run build --prefix client",
+    "start": "node desktop/run.cjs",
+    "dev": "npm run build:client && node desktop/run.cjs"
+  },
+  "devDependencies": {
+    "electron": "^37.2.0"
+  }
+}

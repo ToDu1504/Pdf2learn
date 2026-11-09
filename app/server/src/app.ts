@@ -21,6 +21,37 @@ async function backfillFileHashes() {
   }
 }
 import { cleanupUploads } from "./services/cleanup.service.js";
+import { killAllChildren } from "./utils/children.js";
+
+/**
+ * Thoát sạch: kết thúc mọi tiến trình con (Python dịch, Chrome của engine), đóng SQLite. Gọi khi Electron yêu cầu
+ * (tin nhắn "shutdown" / mất kênh IPC), khi nhận SIGTERM/SIGINT, hoặc khi tiến trình cha (Electron) không còn.
+ */
+let shuttingDown = false;
+export async function shutdown(code = 0) {
+  if (shuttingDown) return;
+  shuttingDown = true;
+  killAllChildren();
+  await sequelize.close().catch(() => {});
+  process.exit(code);
+}
+function watchParent() {
+  process.on("SIGTERM", () => void shutdown());
+  process.on("SIGINT", () => void shutdown());
+  if (process.send) {
+    process.on("message", (m) => m === "shutdown" && void shutdown());
+    process.on("disconnect", () => void shutdown()); // Electron đã thoát/bị tắt
+  }
+  const parent = Number(process.env.PDF2LEARN_PARENT_PID);
+  if (parent)
+    setInterval(() => {
+      try {
+        process.kill(parent, 0);
+      } catch {
+        void shutdown();
+      }
+    }, 5000).unref();
+}
 
 export const app = express();
 app.use(cors({ origin: env.CLIENT_URL }));
@@ -58,10 +89,14 @@ async function start() {
     });
   });
   console.log(`[server] http://localhost:${env.PORT}`);
+  process.send?.({ type: "ready", port: env.PORT }); // báo cho Electron mở cửa sổ
   await cleanupUploads().catch((err) => console.error("[cleanup]", err));
   await backfillFileHashes().catch((err) => console.error("[hash]", err));
   await resumePendingDocuments();
   startAutoPrepare(); // tự soạn trước bài giảng + tự dịch trước PDF ở nền
 }
 
-if (process.env.NODE_ENV !== "test") void start();
+if (process.env.NODE_ENV !== "test") {
+  watchParent();
+  void start();
+}

@@ -102,6 +102,7 @@ export async function kickAutoTranslate(only?: Document) {
 
 /** Gọi khi server khởi động: chạy ngay + định kỳ (bắt kịp khi hạn mức reset, khi có tài liệu mới). */
 export function startAutoPrepare() {
+  if (process.env.PDF2LEARN_NO_AUTO === "1") return; // chạy thử: không soạn/dịch nền
   const tick = () => {
     void kickAutoPrepare();
     void kickAutoTranslate().catch((err) => console.warn("[auto] dịch trước lỗi:", (err as Error).message));

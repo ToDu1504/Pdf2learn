@@ -8,6 +8,7 @@ import { env } from "../../config/env.js";
 import { pdfPath } from "../../middlewares/upload.js";
 import type { Document } from "../../models/index.js";
 import { translateSegments } from "./segmentTranslator.js";
+import { track } from "../../utils/children.js";
 
 /**
  * Dịch PDF sang tiếng Việt GIỮ NGUYÊN BỐ CỤC bằng VI-Translate (https://github.com/breslee1707/VI-Translate,
@@ -84,7 +85,9 @@ const errorLine = (out: string) => out.split(/\r?\n/).find((l) => l.startsWith("
 
 async function py(args: string[]) {
   try {
-    return await run(PYTHON, args, { env: pyEnv(), maxBuffer: 32 * 1024 * 1024, timeout: TIMEOUT_MS, windowsHide: true });
+    const p = run(PYTHON, args, { env: pyEnv(), maxBuffer: 32 * 1024 * 1024, timeout: TIMEOUT_MS, windowsHide: true });
+    track(p.child);
+    return await p;
   } catch (err) {
     const e = err as { stderr?: string; stdout?: string; message: string };
     throw new Error(errorLine(`${e.stderr ?? ""}\n${e.stdout ?? ""}`) ?? e.message);
@@ -94,7 +97,7 @@ async function py(args: string[]) {
 /** Chạy engine và đọc thanh tiến độ (tqdm "7/10 [") trên stderr để báo tiến độ theo trang. */
 function pyWithProgress(args: string[], onProgress: (done: number, total: number) => void) {
   return new Promise<void>((resolve, reject) => {
-    const child = spawn(PYTHON, args, { env: pyEnv(), windowsHide: true });
+    const child = track(spawn(PYTHON, args, { env: pyEnv(), windowsHide: true }));
     let out = "";
     const timer = setTimeout(() => child.kill(), TIMEOUT_MS);
     const read = (buf: Buffer) => {

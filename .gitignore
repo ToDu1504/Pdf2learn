@@ -16,3 +16,4 @@ server/tests/fixtures/outline-*.json
 app/data/
 app/dist/
 app/server/tests/fixtures/outline-*.json
+app/data-location.txt
