@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <!-- Pdf2Learn: trang tài liệu gấp góc chứa một lộ trình (mốc + bài học) -->
+  <rect width="32" height="32" rx="8" fill="#2f7563"/>
+  <path d="M9.5 6.5h9l4.5 4.5v14a1.5 1.5 0 0 1-1.5 1.5h-12A1.5 1.5 0 0 1 8 25V8a1.5 1.5 0 0 1 1.5-1.5z" fill="#fffdf9"/>
+  <path d="M18.5 6.5V10a1 1 0 0 0 1 1H23z" fill="#b6dacd"/>
+  <path d="M12.5 14.5v7" stroke="#2f7563" stroke-width="1.6" stroke-linecap="round"/>
+  <circle cx="12.5" cy="14.5" r="1.9" fill="#2f7563"/>
+  <circle cx="12.5" cy="21.5" r="1.9" fill="#fffdf9" stroke="#2f7563" stroke-width="1.5"/>
+  <path d="M16 14.5h3.5M16 18h3M16 21.5h3.5" stroke="#2f7563" stroke-width="1.6" stroke-linecap="round"/>
+</svg>

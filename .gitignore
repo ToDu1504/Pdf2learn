@@ -1,0 +1,10 @@
+node_modules/
+.env
+server/uploads/
+dist/
+tts-service/
+*.log
+vi-translate/
+.cache/
+translate-service/
+server/_*.ts

@@ -1,0 +1,290 @@
+@import "tailwindcss";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+/*
+ * Ngôn ngữ thiết kế: tối giản kiểu Apple.
+ * - Xám trung tính (ghi đè thang "slate"), 1 màu nhấn xanh (brand), xanh lá/đỏ/cam chỉ cho trạng thái.
+ * - Font hệ thống trên Mac (SF), Inter trên Windows/Linux; tiêu đề chữ đậm, khoảng cách chữ hẹp.
+ * - Card trắng viền mảnh, bóng rất nhẹ; nút bo tròn dạng viên thuốc.
+ */
+@theme {
+  --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Inter", "Segoe UI", system-ui, sans-serif;
+
+  /*
+   * Bảng màu "giấy" dịu mắt cho việc đọc lâu:
+   * - Xám ngả ấm thay cho xám lạnh; nền không trắng tinh, chữ không đen tuyệt đối (giảm tương phản gắt).
+   * - Màu nhấn xanh rêu ngả ngọc, độ bão hòa thấp (#2f7563, tương phản 5.5:1 trên nền sáng, đạt WCAG AA),
+   *   tránh xanh dương bão hòa (ánh sáng bước sóng ngắn dễ gây chói, mỏi mắt khi nhìn lâu).
+   * - Chế độ tối: nền #161615 (không đen tuyệt đối), chữ #efede8 (không trắng tuyệt đối) để chữ không bị "nhòe sáng".
+   */
+  --color-white: #fffdf9;
+  --color-black: #161615;
+
+  --color-slate-50: #f7f6f3;
+  --color-slate-100: #efede8;
+  --color-slate-200: #e4e1da;
+  --color-slate-300: #d3cfc6;
+  --color-slate-400: #a8a399;
+  --color-slate-500: #858077;
+  --color-slate-600: #69655d;
+  --color-slate-700: #4a4741;
+  --color-slate-800: #2e2c29;
+  --color-slate-900: #1f1e1c;
+  --color-slate-950: #161615;
+
+  --color-brand-50: #eef6f3;
+  --color-brand-100: #dcede7;
+  --color-brand-200: #b6dacd;
+  --color-brand-300: #86c0ad;
+  --color-brand-400: #63a994;
+  --color-brand-500: #3d8a75;
+  --color-brand-600: #2f7563;
+  --color-brand-700: #275f51;
+
+  /* Trạng thái: xanh lá ngả vàng (khác màu nhấn), đỏ gạch dịu, cam đất. */
+  --color-emerald-50: #f0f6ec;
+  --color-emerald-100: #e0eed8;
+  --color-emerald-300: #a8cf96;
+  --color-emerald-400: #84b96d;
+  --color-emerald-500: #6aa253;
+  --color-emerald-600: #4f8540;
+  --color-emerald-700: #416d35;
+
+  --color-rose-50: #fbf0ee;
+  --color-rose-100: #f6dfdb;
+  --color-rose-300: #e6a59b;
+  --color-rose-500: #c9584a;
+  --color-rose-600: #b04a3e;
+  --color-rose-700: #923d33;
+
+  --color-amber-50: #fbf4e8;
+  --color-amber-100: #f6e7cc;
+  --color-amber-200: #eed29f;
+  --color-amber-300: #e4b96b;
+  --color-amber-400: #d9a046;
+  --color-amber-500: #c98a2b;
+  --color-amber-800: #6e4a14;
+
+  --color-sky-500: #3d8a75;
+}
+
+@layer base {
+  html {
+    @apply bg-slate-50 text-slate-800 antialiased dark:bg-slate-950 dark:text-slate-100;
+    font-feature-settings: "cv11", "ss01";
+  }
+  body {
+    @apply min-h-screen;
+  }
+  h1,
+  h2,
+  h3 {
+    letter-spacing: -0.02em;
+  }
+  ::selection {
+    @apply bg-brand-200 dark:bg-brand-700/60;
+  }
+  :focus-visible {
+    @apply outline-2 outline-offset-2 outline-brand-500;
+  }
+}
+
+@layer components {
+  .card {
+    @apply rounded-2xl border border-black/[0.06] bg-white shadow-[0_1px_2px_rgba(0,0,0,0.04)] dark:border-white/[0.08] dark:bg-slate-900;
+  }
+  .input {
+    @apply w-full rounded-xl border border-slate-300 bg-white px-3.5 py-2.5 text-[15px] outline-none transition
+      placeholder:text-slate-400 focus:border-brand-500 focus:ring-4 focus:ring-brand-500/15
+      dark:border-slate-700 dark:bg-slate-900;
+  }
+  .label {
+    @apply mb-1.5 block text-[13px] font-medium text-slate-600 dark:text-slate-400;
+  }
+  /* Nhãn nhỏ phía trên tiêu đề (eyebrow) */
+  .eyebrow {
+    @apply text-[12px] font-semibold tracking-wide text-slate-500 uppercase;
+  }
+  .prose-study {
+    @apply text-[15px] leading-7;
+  }
+  .prose-study p {
+    @apply my-2;
+  }
+  .prose-study ul {
+    @apply my-2 list-disc pl-5;
+  }
+  .prose-study ol {
+    @apply my-2 list-decimal pl-5;
+  }
+  .prose-study code {
+    @apply rounded bg-slate-100 px-1 py-0.5 text-[13px] dark:bg-slate-800;
+  }
+  .prose-study pre {
+    @apply my-2 overflow-x-auto rounded-xl bg-slate-900 p-3 text-slate-100;
+  }
+  .prose-study pre code {
+    @apply bg-transparent p-0;
+  }
+  .prose-study strong {
+    @apply font-semibold;
+  }
+  .prose-study h1,
+  .prose-study h2,
+  .prose-study h3 {
+    @apply mt-3 mb-1 font-semibold;
+  }
+  /* Bài giảng: đọc dễ chịu như một trang sách — cột chữ vừa phải, dòng thoáng, tiêu đề rõ. */
+  .prose-lesson {
+    @apply max-w-[68ch] text-[17px] leading-[1.7] text-slate-800 dark:text-slate-200;
+  }
+  .prose-lesson p {
+    @apply my-4;
+  }
+  .prose-lesson h3 {
+    @apply mt-10 mb-3 text-[22px] font-semibold text-slate-900 dark:text-white;
+  }
+  .prose-lesson h3:first-child {
+    @apply mt-0;
+  }
+  .prose-lesson li {
+    @apply my-1.5;
+  }
+  .prose-lesson strong {
+    @apply text-slate-900 dark:text-white;
+  }
+  .prose-lesson blockquote {
+    @apply my-5 rounded-xl bg-slate-50 px-5 py-3 text-slate-600 dark:bg-white/5 dark:text-slate-300;
+  }
+  .prose-lesson table {
+    @apply text-[15px];
+  }
+  .prose-lesson th {
+    @apply bg-slate-50 text-left font-semibold dark:bg-white/5;
+  }
+  .prose-study table {
+    @apply my-2 w-full text-sm;
+  }
+  .prose-study th,
+  .prose-study td {
+    @apply border border-slate-200 px-2 py-1 dark:border-slate-700;
+  }
+}
+
+/* Lật thẻ flashcard */
+.flip {
+  perspective: 1200px;
+}
+.flip-inner {
+  transition: transform 0.5s cubic-bezier(0.2, 0.7, 0.2, 1);
+  transform-style: preserve-3d;
+}
+.flip-inner.flipped {
+  transform: rotateY(180deg);
+}
+.flip-face {
+  backface-visibility: hidden;
+}
+.flip-back {
+  transform: rotateY(180deg);
+}
+
+/* ---------- Ảnh động trang giới thiệu: PDF → lộ trình (vòng 10s) ---------- */
+.p2l-upload {
+  animation: p2l-upload 10s ease-in-out infinite;
+}
+@keyframes p2l-upload {
+  0% { opacity: 0; transform: scale(0.97); }
+  4%, 42% { opacity: 1; transform: none; }
+  48%, 100% { opacity: 0; transform: scale(0.97); }
+}
+.p2l-doc {
+  animation: p2l-doc 10s cubic-bezier(0.3, 0.7, 0.3, 1) infinite;
+}
+@keyframes p2l-doc {
+  0%, 5% { opacity: 0; transform: translateY(-70px) rotate(-6deg); }
+  9% { opacity: 1; transform: translateY(-70px) rotate(-6deg); }
+  18% { opacity: 1; transform: translateY(12px) rotate(0); }
+  24%, 100% { opacity: 0; transform: translateY(24px) scale(0.6); }
+}
+.p2l-hint {
+  animation: p2l-hint 10s ease infinite;
+}
+@keyframes p2l-hint {
+  0%, 2% { opacity: 0; }
+  5%, 18% { opacity: 1; }
+  22%, 100% { opacity: 0; }
+}
+.p2l-progress {
+  animation: p2l-progress 10s ease infinite;
+}
+@keyframes p2l-progress {
+  0%, 21% { opacity: 0; }
+  24%, 42% { opacity: 1; }
+  46%, 100% { opacity: 0; }
+}
+.p2l-bar {
+  animation: p2l-bar 10s ease-in-out infinite;
+}
+@keyframes p2l-bar {
+  0%, 23% { width: 0; }
+  41%, 100% { width: 100%; }
+}
+.p2l-roadmap {
+  animation: p2l-roadmap 10s ease infinite;
+}
+@keyframes p2l-roadmap {
+  0%, 48% { opacity: 0; }
+  52%, 92% { opacity: 1; }
+  98%, 100% { opacity: 0; }
+}
+.p2l-spine {
+  animation: p2l-spine 10s ease-out infinite;
+}
+@keyframes p2l-spine {
+  0%, 50% { transform: scaleY(0); }
+  72%, 100% { transform: scaleY(1); }
+}
+/* Giảm chuyển động: chỉ hiện lộ trình tĩnh. */
+@media (prefers-reduced-motion: reduce) {
+  .p2l *,
+  .p2l {
+    animation: none !important;
+  }
+  .p2l-upload {
+    display: none;
+  }
+}
+
+/* Node sơ đồ bấm được */
+.mm-link {
+  transition: opacity 0.15s, filter 0.15s;
+}
+.mm-link:hover {
+  filter: drop-shadow(0 0 6px rgb(99 102 241 / 0.7));
+}
+
+/* Ý được chọn từ sơ đồ: nháy sáng vài giây */
+@keyframes focus-flash {
+  0%, 60% { box-shadow: 0 0 0 3px rgb(99 102 241 / 0.9); background-color: rgb(99 102 241 / 0.12); }
+  100% { box-shadow: 0 0 0 0 rgb(99 102 241 / 0); }
+}
+.focus-flash {
+  animation: focus-flash 2.4s ease-out;
+  border-radius: 0.75rem;
+}
+
+.react-pdf__Page canvas {
+  height: auto !important;
+}
+/* Bản dịch: chữ dễ đọc, cỡ vừa phải trong khung hẹp. */
+.prose-translation {
+  font-size: 15px;
+  line-height: 1.75;
+}
+.prose-translation h3 {
+  margin-top: 1.25rem;
+  font-size: 17px;
+  font-weight: 600;
+}
