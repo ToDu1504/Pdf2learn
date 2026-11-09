@@ -11,3 +11,8 @@ server/_*.ts
 
 # Mục lục sách có bản quyền dùng cho test (chỉ để ở máy dev)
 server/tests/fixtures/outline-*.json
+
+# App desktop: dữ liệu khi chạy thử, bản build, mục lục sách có bản quyền
+app/data/
+app/dist/
+app/server/tests/fixtures/outline-*.json
