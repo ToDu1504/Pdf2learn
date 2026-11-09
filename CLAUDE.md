@@ -57,6 +57,8 @@ Only the tutor (`services/ai/tutor.agent.ts`) is an agent. It uses function call
 
 Output goes to `uploads/translated/<file_hash>/c<k>.pdf`, shared across twin documents. The engine's cache, layout model and browser profile live in `vi-translate/.home` (USERPROFILE override, keeps drive C clean). TOC/index/scan pages stay in English by design. Without `vi-translate/.venv` the tab falls back to Gemini text translation (`translate.service.ts`, `page_translations`).
 
+**Learning loop.** The dashboard's "Hôm nay" block shows the next lesson (`/stats/overview` → `nextLesson`: first unfinished core lesson of the most recently active document) and due cards; the sidebar Flashcard item shows a due badge. QuickCheck invalidates `["stats","overview"]` after completing a lesson.
+
 **Roadmap UI.** `DocumentPage` shows `RoadmapView` (vertical spine, sections as stations, lessons on both sides) when there is no `?chapter=` param, and the lesson view (tabs Bài giảng / Tóm tắt / Sơ đồ / Câu hỏi + `QuickCheck`) when there is one. `QuickCheck` grades on the client: ≥ 70% calls `POST /chapters/:id/complete`. `LessonBody` turns `(tr. N)` into buttons that open the PDF.
 
 **Design language.** Minimal, Apple-like layout with a calm reading palette (`client/src/index.css` `@theme`). The `slate` scale is overridden with warm “paper” grays; `white` is `#fffdf9` and `black` is `#161615`, so nothing is pure white or pure black. `brand` is a muted sage-teal accent (#2f7563, 5.5:1 contrast). emerald, rose and amber are softened and used only for status. Icons come from `lucide-react`, never emoji. Buttons are pill-shaped, and only `primary` carries color. Cards have a hairline `black/[0.06]` border. Don’t add gradients or saturated colors. The landing animation is `features/landing/PdfToRoadmap.tsx` (CSS keyframes in `index.css`, respects reduced motion). The sidebar can be collapsed (stored in localStorage), and the logo links home.
@@ -65,7 +67,7 @@ Output goes to `uploads/translated/<file_hash>/c<k>.pdf`, shared across twin doc
 
 ## Deviations from the plan
 
-- Flashcards are derived from summary `key_terms`, not a separate AI call.
+- Flashcards are derived from summary `key_terms`, not a separate AI call. They are created when a chapter is analyzed (including chapters batch-analyzed ahead of the user), so only cards of **completed** lessons count as due (`/flashcards/due`, `/stats/overview`), unless a single `chapterId` is requested.
 - Chapter boundary edits (`PATCH /documents/:id/chapters`) keep chapters whose page range is unchanged and re-process the rest.
 - Text-to-speech (VieNeu) was built, then removed.
 

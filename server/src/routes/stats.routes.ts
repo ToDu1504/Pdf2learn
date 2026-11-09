@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { Op, QueryTypes } from "sequelize";
 import { sequelize } from "../config/db.js";
-import { Document, Flashcard, QuizAttempt } from "../models/index.js";
+import { Chapter, Document, Flashcard, QuizAttempt } from "../models/index.js";
 import { auth } from "../middlewares/auth.js";
 import { findOwnedDocument } from "../services/access.js";
 
@@ -13,14 +13,50 @@ statsRoutes.get("/overview", async (req, res) => {
   const [documents, attempts, dueCards, avg] = await Promise.all([
     Document.count({ where: { user_id: userId } }),
     QuizAttempt.count({ where: { user_id: userId, finished_at: { [Op.ne]: null } } }),
-    Flashcard.count({ where: { user_id: userId, next_review_at: { [Op.lte]: new Date() } } }),
+    // Chỉ thẻ của bài đã học xong (xem flashcards.routes /due).
+    Flashcard.count({
+      where: { user_id: userId, next_review_at: { [Op.lte]: new Date() } },
+      include: [{ model: Chapter, as: "chapter", attributes: [], where: { completed_at: { [Op.ne]: null } }, required: true }],
+    }),
     sequelize.query<{ avg: number | null }>(
       "SELECT AVG(score) AS avg FROM quiz_attempts WHERE user_id = :userId AND finished_at IS NOT NULL",
       { replacements: { userId }, type: QueryTypes.SELECT },
     ),
   ]);
-  res.json({ documents, attempts, dueCards, avgScore: avg[0]?.avg == null ? null : Number(avg[0].avg) });
+  res.json({ documents, attempts, dueCards, avgScore: avg[0]?.avg == null ? null : Number(avg[0].avg), nextLesson: await nextLessonOf(userId) });
 });
+
+/**
+ * "Học tiếp": bài chưa học đầu tiên (ưu tiên bài cốt lõi) của tài liệu học gần nhất
+ * (bài hoàn thành gần nhất; chưa học bài nào thì tài liệu mới nhất).
+ */
+async function nextLessonOf(userId: number) {
+  const docs = await Document.findAll({ where: { user_id: userId, status: "done" }, attributes: ["id", "title", "created_at"] });
+  if (!docs.length) return null;
+  const chapters = await Chapter.findAll({
+    where: { document_id: docs.map((d) => d.id) },
+    attributes: ["id", "document_id", "title", "order_index", "importance", "est_minutes", "completed_at"],
+    order: [["order_index", "ASC"]],
+  });
+  const lastActive = (docId: number, created: Date) =>
+    Math.max(created.getTime(), ...chapters.filter((c) => c.document_id === docId && c.completed_at).map((c) => c.completed_at!.getTime()));
+  const ordered = [...docs].sort((a, b) => lastActive(b.id, b.created_at) - lastActive(a.id, a.created_at));
+  for (const doc of ordered) {
+    const own = chapters.filter((c) => c.document_id === doc.id);
+    const next = own.find((c) => !c.completed_at && c.importance !== "optional") ?? own.find((c) => !c.completed_at);
+    if (!next) continue;
+    return {
+      documentId: doc.id,
+      documentTitle: doc.title,
+      chapterId: next.id,
+      title: next.title,
+      estMinutes: next.est_minutes,
+      done: own.filter((c) => c.completed_at).length,
+      total: own.length,
+    };
+  }
+  return null;
+}
 
 statsRoutes.get("/weak-topics", async (req, res) => {
   const doc = await findOwnedDocument(String(req.query.documentId), req.userId);

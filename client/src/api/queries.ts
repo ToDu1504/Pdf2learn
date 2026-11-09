@@ -34,10 +34,13 @@ export const useChapter = (id: number | null) =>
     refetchInterval: (q) => (q.state.data && !q.state.data.summary && q.state.data.analyzing ? 3000 : false),
   });
 
+export type NextLesson = { documentId: number; documentTitle: string; chapterId: number; title: string; estMinutes: number | null; done: number; total: number };
+export type Overview = { documents: number; attempts: number; dueCards: number; avgScore: number | null; nextLesson: NextLesson | null };
+
 export const useOverview = () =>
   useQuery({
     queryKey: ["stats", "overview"],
-    queryFn: () => get<{ documents: number; attempts: number; dueCards: number; avgScore: number | null }>("/stats/overview"),
+    queryFn: () => get<Overview>("/stats/overview"),
   });
 
 export const useQuizHistory = (documentId?: number) =>

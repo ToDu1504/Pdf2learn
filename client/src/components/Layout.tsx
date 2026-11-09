@@ -4,6 +4,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { BarChart3, House, Layers, LogOut, Menu, PanelLeftClose, PanelLeftOpen, Settings, X } from "lucide-react";
 import { useAuth } from "../stores/auth";
 import { useThemeSync } from "../hooks/useTheme";
+import { useOverview } from "../api/queries";
 import { cn, IconButton, Spinner } from "./ui";
 
 const NAV = [
@@ -63,6 +64,8 @@ export function AppLayout() {
     navigate("/login");
   };
 
+  const due = useOverview().data?.dueCards ?? 0;
+
   const nav = (compact: boolean) => (
     <nav className="flex flex-col gap-0.5">
       {NAV.map(({ to, label, icon: Icon, end }) => (
@@ -74,7 +77,7 @@ export function AppLayout() {
           onClick={() => setOpen(false)}
           className={({ isActive }) =>
             cn(
-              "flex items-center gap-3 rounded-lg py-2 text-[14px] font-medium transition-colors",
+              "relative flex items-center gap-3 rounded-lg py-2 text-[14px] font-medium transition-colors",
               compact ? "justify-center px-0" : "px-3",
               isActive ? "bg-black/[0.06] text-slate-900 dark:bg-white/10 dark:text-white" : "text-slate-600 hover:bg-black/[0.04] dark:text-slate-400 dark:hover:bg-white/5",
             )
@@ -84,6 +87,17 @@ export function AppLayout() {
             <>
               <Icon className={cn("size-[18px] shrink-0", isActive ? "text-brand-600 dark:text-brand-400" : "text-slate-400")} strokeWidth={1.75} />
               {!compact && label}
+              {to === "/app/flashcards" && due > 0 && (
+                <span
+                  className={cn(
+                    "rounded-full bg-brand-600 text-[11px] leading-[18px] font-semibold text-white tabular-nums",
+                    compact ? "absolute top-0.5 right-0.5 min-w-[18px] px-1" : "ml-auto min-w-[20px] px-1.5 text-center",
+                  )}
+                  aria-label={`${due} thẻ cần ôn`}
+                >
+                  {due > 99 ? "99+" : due}
+                </span>
+              )}
             </>
           )}
         </NavLink>

@@ -26,6 +26,7 @@ export function QuickCheck({ lesson, documentId, onNext }: { lesson: ChapterDeta
       await http.post(`/chapters/${lesson.id}/complete`, { completed: value });
       await Promise.all([qc.invalidateQueries({ queryKey: ["chapter", lesson.id] }), qc.invalidateQueries({ queryKey: ["document", documentId] })]);
       void qc.invalidateQueries({ queryKey: ["documents"] });
+      void qc.invalidateQueries({ queryKey: ["stats", "overview"] }); // "Học tiếp" + thẻ cần ôn
     } catch (err) {
       toast.error(errorMessage(err));
     } finally {

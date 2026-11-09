@@ -1,8 +1,8 @@
-import { Link } from "react-router-dom";
-import { ChevronRight, FileText, Inbox, ListChecks } from "lucide-react";
+import { Link, useNavigate } from "react-router-dom";
+import { ArrowRight, BookOpen, ChevronRight, FileText, Inbox, Layers, ListChecks } from "lucide-react";
 import { useDocuments, useOverview, useQuizHistory } from "../api/queries";
 import { Page } from "../components/Layout";
-import { Badge, Empty, ProgressBar, Skeleton } from "../components/ui";
+import { Badge, Button, Empty, ProgressBar, Skeleton } from "../components/ui";
 import { UploadZone } from "../features/documents/UploadZone";
 import { stepLabel } from "../hooks/useDocumentProgress";
 import { useAuth } from "../stores/auth";
@@ -16,6 +16,54 @@ export const STATUS: Record<DocumentItem["status"], { label: string; color: "sla
 };
 
 const fmtDate = (s: string) => new Date(s).toLocaleDateString("vi-VN", { day: "2-digit", month: "2-digit", year: "numeric" });
+
+/** "Hôm nay": học tiếp bài kế tiếp + ôn thẻ đến hạn — vòng học chính của app. */
+function Today() {
+  const navigate = useNavigate();
+  const { data, isLoading } = useOverview();
+  if (isLoading) return <Skeleton className="mb-10 h-28" />;
+  const next = data?.nextLesson;
+  const due = data?.dueCards ?? 0;
+  if (!next && !due) return null;
+  return (
+    <section className="mb-10 grid gap-3 md:grid-cols-2">
+      {next && (
+        <div className="card flex flex-col gap-3 p-5">
+          <p className="eyebrow flex items-center gap-2">
+            <BookOpen className="size-4" strokeWidth={1.75} /> Học tiếp
+          </p>
+          <div className="min-w-0">
+            <p className="truncate text-[17px] font-semibold">{next.title}</p>
+            <p className="truncate text-[13px] text-slate-500">
+              {next.documentTitle} · bài {next.done + 1}/{next.total}
+              {next.estMinutes ? ` · khoảng ${next.estMinutes} phút` : ""}
+            </p>
+            <ProgressBar value={(next.done / Math.max(1, next.total)) * 100} className="mt-2 h-1 max-w-xs" />
+          </div>
+          <Button className="self-start" onClick={() => navigate(`/app/documents/${next.documentId}?chapter=${next.chapterId}`)}>
+            Học bài này <ArrowRight />
+          </Button>
+        </div>
+      )}
+      <div className="card flex flex-col gap-3 p-5">
+        <p className="eyebrow flex items-center gap-2">
+          <Layers className="size-4" strokeWidth={1.75} /> Ôn tập
+        </p>
+        <div>
+          <p className="text-[17px] font-semibold">{due ? `${due} thẻ đến hạn ôn` : "Không có thẻ nào cần ôn"}</p>
+          <p className="text-[13px] text-slate-500">
+            {due ? "Ôn đúng lúc sắp quên giúp nhớ lâu hơn (lặp lại ngắt quãng)." : "Học xong một bài, các khái niệm của bài sẽ vào lịch ôn."}
+          </p>
+        </div>
+        {due > 0 && (
+          <Button variant="secondary" className="self-start" onClick={() => navigate("/app/flashcards")}>
+            Ôn ngay <ArrowRight />
+          </Button>
+        )}
+      </div>
+    </section>
+  );
+}
 
 export function Dashboard() {
   const user = useAuth((s) => s.user);
@@ -32,6 +80,7 @@ export function Dashboard() {
 
   return (
     <Page title={`Chào ${user?.full_name?.split(" ").at(-1) ?? "bạn"}.`}>
+      <Today />
       <div className="mb-10 grid grid-cols-2 overflow-hidden rounded-2xl border border-black/[0.06] bg-white lg:grid-cols-4 dark:border-white/[0.08] dark:bg-slate-900">
         {stats.map((s, i) => {
           const body = (

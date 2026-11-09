@@ -16,6 +16,10 @@ async function chapterIdsOf(documentId: unknown, userId: number) {
   return (await Chapter.findAll({ where: { document_id: doc.id }, attributes: ["id"] })).map((c) => c.id);
 }
 
+/**
+ * Thẻ đến hạn ôn. Thẻ được tạo khi AI phân tích chương (kể cả chương phân tích sẵn mà người dùng chưa học),
+ * nên chỉ thẻ của BÀI ĐÃ HỌC XONG mới vào lịch ôn — trừ khi hỏi riêng 1 chương (chapterId).
+ */
 flashcardRoutes.get("/due", async (req, res) => {
   const where: Record<string, unknown> = { user_id: req.userId, next_review_at: { [Op.lte]: new Date() } };
   const chapterIds = await chapterIdsOf(req.query.documentId, req.userId);
@@ -23,7 +27,14 @@ flashcardRoutes.get("/due", async (req, res) => {
   if (req.query.chapterId) where.chapter_id = Number(req.query.chapterId);
   const cards = await Flashcard.findAll({
     where,
-    include: [{ model: Chapter, as: "chapter", attributes: ["id", "title", "document_id"] }],
+    include: [
+      {
+        model: Chapter,
+        as: "chapter",
+        attributes: ["id", "title", "document_id"],
+        ...(!req.query.chapterId && { where: { completed_at: { [Op.ne]: null } }, required: true }),
+      },
+    ],
     order: [["next_review_at", "ASC"]],
     limit: Math.min(200, Number(req.query.limit) || 50),
   });
