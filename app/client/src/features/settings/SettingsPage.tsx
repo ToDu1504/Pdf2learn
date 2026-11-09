@@ -6,6 +6,7 @@ import { toast } from "../../stores/toast";
 import { applyTheme } from "../../hooks/useTheme";
 import type { Settings } from "../../types";
 import { Monitor, Moon, Sun } from "lucide-react";
+import { ApiKeyForm, DataDirControl } from "../onboarding/Welcome";
 
 function Toggle({ checked, onChange, label, hint }: { checked: boolean; onChange: (v: boolean) => void; label: string; hint: string }) {
   return (
@@ -60,6 +61,14 @@ export function SettingsPage() {
               </Button>
             ))}
           </div>
+        </Section>
+
+        <Section title="AI (Gemini)" desc="Key được kiểm tra với Google rồi lưu dạng mã hóa trên máy này">
+          <ApiKeyForm onSaved={() => toast.success("Đã lưu cấu hình AI")} />
+        </Section>
+
+        <Section title="Dữ liệu" desc="Nơi lưu cơ sở dữ liệu, PDF và bản dịch">
+          <DataDirControl />
         </Section>
 
         <Section title="Chuẩn bị trước" desc="Làm sẵn ở nền để mở bài nào cũng có ngay, không phải chờ">

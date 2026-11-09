@@ -156,7 +156,7 @@ export async function runTutor(ctx: Ctx, history: Content[]) {
   for (let step = 0; step < MAX_STEPS; step++) {
     const stream = await withModelFallback((model) =>
       withRetry(() =>
-        ai.models.generateContentStream({
+        ai().models.generateContentStream({
           model,
           contents,
           config: { systemInstruction, tools: [{ functionDeclarations: declarations }], temperature: 0.4 },

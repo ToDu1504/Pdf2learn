@@ -7,6 +7,7 @@ import { env } from "./config/env.js";
 import { sequelize } from "./config/db.js";
 import { migrate } from "./db/migrate.js";
 import { ensureLocalUser } from "./middlewares/auth.js";
+import { loadAppConfig } from "./config/appConfig.js";
 import { api } from "./routes/index.js";
 import { errorHandler } from "./middlewares/error.js";
 import { hashFile, resumePendingDocuments } from "./jobs/processDocument.js";
@@ -73,6 +74,7 @@ async function start() {
     await sequelize.authenticate();
     await migrate(); // SQLite: tạo/cập nhật lược đồ ngay khi khởi động
     await ensureLocalUser(); // không có đăng nhập: 1 người dùng cục bộ
+    await loadAppConfig(); // Gemini API key (mã hóa) + model từ data/config.json
     console.log("[db] connected");
   } catch (err) {
     console.error("[db] connection failed:", (err as Error).message);

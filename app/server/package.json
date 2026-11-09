@@ -6,8 +6,7 @@
     "dev": "nodemon --watch src --ext ts --exec tsx src/app.ts",
     "start": "tsx src/app.ts",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run",
-    "test:gemini": "tsx scripts/test-gemini.ts"
+    "test": "vitest run"
   },
   "dependencies": {
     "@google/genai": "^3.0.0",

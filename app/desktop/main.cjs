@@ -10,7 +10,7 @@
  *  4. Đóng cửa sổ = thu xuống khay (soạn/dịch nền vẫn chạy). Thoát hẳn từ menu khay → tắt server và CẢ CÂY tiến trình
  *     con (Python, Chrome của engine dịch), không để sót.
  */
-const { app, BrowserWindow, Menu, Tray, nativeImage, shell, dialog } = require("electron");
+const { app, BrowserWindow, Menu, Tray, nativeImage, shell, dialog, ipcMain, safeStorage } = require("electron");
 const { fork, execFileSync } = require("node:child_process");
 const fs = require("node:fs");
 const net = require("node:net");
@@ -143,6 +143,26 @@ async function startServer() {
       quit();
     }
   });
+  // Server nhờ mã hóa/giải mã Gemini API key bằng safeStorage (gắn với tài khoản Windows).
+  server.on("message", (m) => {
+    if (!m || m.type !== "secret") return;
+    let reply;
+    try {
+      if (!safeStorage.isEncryptionAvailable()) throw new Error("Máy không hỗ trợ mã hóa safeStorage");
+      const value =
+        m.op === "encrypt"
+          ? safeStorage.encryptString(String(m.value)).toString("base64")
+          : safeStorage.decryptString(Buffer.from(String(m.value), "base64"));
+      reply = { type: "secret-result", id: m.id, value };
+    } catch (err) {
+      reply = { type: "secret-result", id: m.id, error: err.message };
+    }
+    try {
+      server?.send(reply);
+    } catch {
+      /* server đã tắt */
+    }
+  });
   await new Promise((resolve, reject) => {
     const t = setTimeout(() => reject(new Error("Máy chủ khởi động quá lâu")), 90_000);
     server.on("message", (m) => {
@@ -193,7 +213,7 @@ function createWindow() {
     icon: path.join(ASSETS, "icon-256.png"),
     backgroundColor: "#f6f4ef",
     autoHideMenuBar: true,
-    webPreferences: { contextIsolation: true, nodeIntegration: false, sandbox: true },
+    webPreferences: { contextIsolation: true, nodeIntegration: false, sandbox: true, preload: path.join(__dirname, "preload.cjs") },
   });
   win.removeMenu();
   win.once("ready-to-show", () => win?.show());
@@ -248,6 +268,51 @@ async function quit() {
   tray?.destroy();
   app.exit(0);
 }
+
+/* ---------------- giao diện gọi tiến trình chính (preload.cjs) ---------------- */
+
+ipcMain.handle("data-dir:get", () => DATA_DIR);
+ipcMain.handle("data-dir:open", () => shell.openPath(DATA_DIR));
+ipcMain.handle("open-external", (_e, url) => (/^https?:\/\//.test(String(url)) ? shell.openExternal(String(url)) : undefined));
+
+/**
+ * Đổi thư mục dữ liệu: chọn thư mục → (nếu thư mục mới chưa có dữ liệu) tắt server, chép DB + PDF + bản dịch + gói
+ * dịch sang → ghi đường dẫn mới cạnh app → khởi động lại. Thư mục cũ giữ nguyên (người dùng tự xóa khi muốn).
+ */
+ipcMain.handle("data-dir:choose", async () => {
+  const pick = await dialog.showOpenDialog(win ?? undefined, {
+    title: "Chọn thư mục lưu dữ liệu Pdf2Learn",
+    defaultPath: DATA_DIR,
+    properties: ["openDirectory", "createDirectory"],
+  });
+  const target = pick.filePaths[0];
+  if (pick.canceled || !target || path.resolve(target) === path.resolve(DATA_DIR)) return { changed: false };
+  const hasData = fs.existsSync(path.join(target, "pdf2learn.db"));
+  const { response } = await dialog.showMessageBox(win ?? undefined, {
+    type: "question",
+    buttons: hasData ? ["Dùng dữ liệu ở thư mục đó", "Hủy"] : ["Chép dữ liệu sang và khởi động lại", "Hủy"],
+    defaultId: 0,
+    cancelId: 1,
+    title: "Đổi thư mục dữ liệu",
+    message: hasData
+      ? `Thư mục "${target}" đã có dữ liệu Pdf2Learn. App sẽ khởi động lại và dùng dữ liệu ở đó.`
+      : `Dữ liệu hiện tại sẽ được chép sang "${target}", rồi app khởi động lại. Thư mục cũ vẫn được giữ nguyên.`,
+  });
+  if (response !== 0) return { changed: false };
+  quitting = true;
+  await stopServer();
+  if (!hasData) {
+    for (const name of fs.readdirSync(DATA_DIR)) {
+      if (name === "electron" || name === "cache" || name === "server.pid") continue; // phiên Electron/cache tạo lại được
+      fs.cpSync(path.join(DATA_DIR, name), path.join(target, name), { recursive: true });
+    }
+  }
+  fs.writeFileSync(LOCATION_FILE, target, "utf8");
+  tray?.destroy();
+  app.relaunch();
+  app.exit(0);
+  return { changed: true };
+});
 
 /* ---------------- vòng đời ---------------- */
 

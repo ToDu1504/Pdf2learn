@@ -5,11 +5,21 @@ import { isDailyQuotaError, withRetry } from "../../utils/withRetry.js";
 import { HttpError } from "../../utils/HttpError.js";
 import { cutChapterPdf } from "../pdf.service.js";
 
-export const ai = new GoogleGenAI({ apiKey: env.GEMINI_API_KEY });
-export const MODEL = env.GEMINI_MODEL;
+/**
+ * App desktop: API key / model đổi được khi đang chạy (Cài đặt → AI) → tạo lại client khi key đổi, đọc model mỗi lần.
+ */
+let client: GoogleGenAI | null = null;
+let clientKey = "";
+export function ai() {
+  if (!client || clientKey !== env.GEMINI_API_KEY) {
+    client = new GoogleGenAI({ apiKey: env.GEMINI_API_KEY });
+    clientKey = env.GEMINI_API_KEY;
+  }
+  return client;
+}
 
 export function assertAiConfigured() {
-  if (!env.GEMINI_API_KEY || !MODEL) throw new HttpError(503, "Chưa cấu hình GEMINI_API_KEY / GEMINI_MODEL");
+  if (!env.GEMINI_API_KEY || !env.GEMINI_MODEL) throw new HttpError(503, "Chưa nhập Gemini API key: vào Cài đặt → AI (Gemini).");
 }
 
 export type AiFeature = "split" | "summarize" | "quiz" | "grade" | "tutor" | "mindmap" | "translate";
@@ -42,7 +52,7 @@ export async function aiSlot<T>(fn: () => Promise<T>): Promise<T> {
 }
 
 /** Tóm tắt / sinh câu hỏi không cần suy luận sâu: giảm mức "thinking" để nhanh và rẻ hơn (chỉ model Gemini 3+). */
-export function thinkingConfig(model = MODEL) {
+export function thinkingConfig(model = env.GEMINI_MODEL) {
   if (env.GEMINI_THINKING === "default" || !/^gemini-[3-9]/.test(model)) return {};
   const level = { minimal: ThinkingLevel.MINIMAL, low: ThinkingLevel.LOW, high: ThinkingLevel.HIGH }[env.GEMINI_THINKING];
   return { thinkingConfig: { thinkingLevel: level } };
@@ -57,7 +67,12 @@ export class QuotaExhaustedError extends Error {
   }
 }
 
-const MODELS = [MODEL, ...env.GEMINI_FALLBACK_MODELS.split(",").map((m) => m.trim()).filter((m) => m && m !== MODEL)];
+const models = () => [
+  env.GEMINI_MODEL,
+  ...env.GEMINI_FALLBACK_MODELS.split(",")
+    .map((m) => m.trim())
+    .filter((m) => m && m !== env.GEMINI_MODEL),
+];
 /** model → thời điểm có thể dùng lại (hạn mức ngày của Google reset lúc 0h giờ Thái Bình Dương). */
 const exhaustedUntil = new Map<string, number>();
 
@@ -70,7 +85,7 @@ export function nextQuotaReset() {
 }
 
 export function availableModels() {
-  return MODELS.filter((m) => (exhaustedUntil.get(m) ?? 0) <= Date.now());
+  return models().filter((m) => (exhaustedUntil.get(m) ?? 0) <= Date.now());
 }
 
 /**
@@ -114,7 +129,7 @@ export async function generateJson<T>(opts: {
     const res = await aiSlot(() =>
       withModelFallback((model) =>
         withRetry(() =>
-          ai.models.generateContent({
+          ai().models.generateContent({
             model,
             contents: [{ role: "user", parts: opts.parts }],
             config: {
@@ -142,10 +157,10 @@ export async function generateJson<T>(opts: {
 export async function uploadPdfToGemini(data: Uint8Array, displayName: string) {
   assertAiConfigured();
   const blob = new Blob([data as BlobPart], { type: "application/pdf" });
-  let file = await withRetry(() => ai.files.upload({ file: blob, config: { mimeType: "application/pdf", displayName } }));
+  let file = await withRetry(() => ai().files.upload({ file: blob, config: { mimeType: "application/pdf", displayName } }));
   for (let i = 0; file.state === FileState.PROCESSING && i < 60; i++) {
     await new Promise((r) => setTimeout(r, 2000));
-    file = await ai.files.get({ name: file.name! });
+    file = await ai().files.get({ name: file.name! });
   }
   if (file.state === FileState.FAILED || !file.uri) throw new Error(`Gemini không xử lý được file ${displayName}`);
   return { uri: file.uri, expiresAt: file.expirationTime ? new Date(file.expirationTime) : null };

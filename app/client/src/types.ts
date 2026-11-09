@@ -175,3 +175,13 @@ export type TutorMessage = {
 };
 export type TutorSession = { id: number; title: string; document_id: number; created_at: string };
 
+
+/** Cấu hình app desktop (server: config/appConfig.ts). Không bao giờ chứa key đầy đủ. */
+export type AppConfig = {
+  configured: boolean;
+  key_hint: string | null;
+  key_encrypted: boolean;
+  gemini_model: string;
+  gemini_fallback_models: string;
+  data_dir: string;
+};

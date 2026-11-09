@@ -4,6 +4,7 @@ import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 import { AppLayout } from "./components/Layout";
 import { Spinner, ConfirmDialog, Toaster } from "./components/ui";
 import { Dashboard } from "./pages/Dashboard";
+import { WelcomeGate } from "./features/onboarding/Welcome";
 
 const DocumentPage = lazy(() => import("./pages/DocumentPage").then((m) => ({ default: m.DocumentPage })));
 const QuizPlayPage = lazy(() => import("./features/quiz/QuizPlayPage").then((m) => ({ default: m.QuizPlayPage })));
@@ -29,7 +30,14 @@ export default function App() {
         <Routes>
           {/* App desktop: không có trang giới thiệu/đăng nhập — mở thẳng vào trang chủ học tập. */}
           <Route path="/" element={<Navigate to="/app" replace />} />
-          <Route path="/app" element={<AppLayout />}>
+          <Route
+            path="/app"
+            element={
+              <WelcomeGate>
+                <AppLayout />
+              </WelcomeGate>
+            }
+          >
             <Route index element={<Dashboard />} />
             <Route path="documents/:id" element={<DocumentPage />} />
             <Route path="documents/:id/tutor" element={<TutorPage />} />

@@ -10,6 +10,7 @@ import type {
   Settings,
   TutorMessage,
   TutorSession,
+  AppConfig,
 } from "../types";
 
 const get = async <T,>(url: string) => (await http.get<T>(url)).data;
@@ -77,3 +78,14 @@ export const useTutorSession = (id: number | null) =>
     queryFn: () => get<TutorSession & { messages: TutorMessage[] }>(`/tutor/sessions/${id}`),
     enabled: !!id,
   });
+
+export const useAppConfig = () => useQuery({ queryKey: ["app-config"], queryFn: () => get<AppConfig>("/app-config"), staleTime: 60_000 });
+
+export function useSaveAppConfig() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (patch: Partial<{ gemini_api_key: string; gemini_model: string; gemini_fallback_models: string }>) =>
+      (await http.put<AppConfig>("/app-config", patch)).data,
+    onSuccess: (data) => qc.setQueryData(["app-config"], data),
+  });
+}
