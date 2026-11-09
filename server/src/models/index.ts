@@ -9,6 +9,7 @@ import {
 import { sequelize } from "../config/db.js";
 import type { RoadmapReport } from "../services/roadmap.service.js";
 import type { Evidence, Grounding, Subtopic } from "../services/ai/grounding.js";
+import type { BookReview } from "../services/bookReview.service.js";
 
 const pk = { type: DataTypes.INTEGER, autoIncrement: true, primaryKey: true };
 const int = (allowNull = false) => ({ type: DataTypes.INTEGER, allowNull });
@@ -177,6 +178,8 @@ export class Question extends Model<InferAttributes<Question>, InferCreationAttr
   declare topic: string;
   declare source_quote: CreationOptional<string | null>;
   declare verified: CreationOptional<boolean | null>;
+  /** "book": câu hỏi in trong sách (đáp án theo sách), không phải AI soạn. */
+  declare origin: CreationOptional<"ai" | "book">;
 }
 Question.init(
   {
@@ -192,6 +195,7 @@ Question.init(
     topic: str(),
     source_quote: text(true),
     verified: { type: DataTypes.BOOLEAN, allowNull: true },
+    origin: { type: DataTypes.ENUM("ai", "book"), defaultValue: "ai" },
   },
   { sequelize, tableName: "questions" },
 );
@@ -375,9 +379,18 @@ export class RoadmapSection extends Model<InferAttributes<RoadmapSection>, Infer
   declare title: string;
   declare source_title: CreationOptional<string | null>;
   declare description: CreationOptional<string | null>;
+  declare review: CreationOptional<BookReview | null>;
 }
 RoadmapSection.init(
-  { id: pk, document_id: int(), order_index: int(), title: str(), source_title: { type: DataTypes.STRING(500), allowNull: true }, description: text(true) },
+  {
+    id: pk,
+    document_id: int(),
+    order_index: int(),
+    title: str(),
+    source_title: { type: DataTypes.STRING(500), allowNull: true },
+    description: text(true),
+    review: json("review", true),
+  },
   { sequelize, tableName: "roadmap_sections" },
 );
 

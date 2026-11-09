@@ -18,6 +18,8 @@ const createBody = z.object({
   count: z.number().int().min(1).max(50).default(10),
   difficulty: z.enum(["easy", "medium", "hard"]).optional(),
   types: z.array(z.enum(["mcq", "true_false", "short_answer"])).min(1).optional(),
+  /** "book": chỉ câu hỏi in trong sách (đáp án theo sách); "ai": chỉ câu AI soạn. */
+  origin: z.enum(["ai", "book"]).optional(),
 });
 
 /** Ẩn đáp án khi gửi đề cho người làm bài. */
@@ -30,6 +32,8 @@ const publicQuestion = (q: Question) => ({
   options: q.options,
   source_page: q.source_page,
   topic: q.topic,
+  // Câu nhiều đáp án (câu hỏi của sách "Choose two"): đáp án là nhiều lựa chọn nối bằng xuống dòng.
+  multi: q.type === "mcq" && q.correct_answer.includes("\n"),
 });
 
 /** Câu hỏi người dùng từng làm sai, hoặc cùng chủ đề với câu từng sai. */
@@ -57,6 +61,7 @@ quizRoutes.post("/", async (req, res) => {
   const where: Record<string, unknown> = { chapter_id: chapterIds };
   if (body.difficulty) where.difficulty = body.difficulty;
   if (body.types) where.type = body.types;
+  if (body.origin) where.origin = body.origin;
   if (body.mode === "weak") {
     const ids = await weakQuestionIds(req.userId, doc.id);
     if (!ids.length) throw new HttpError(400, "Chưa có dữ liệu điểm yếu, hãy làm vài bài trước");

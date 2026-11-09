@@ -14,7 +14,8 @@ export const PASS_RATE = 0.7;
  */
 export function QuickCheck({ lesson, documentId, onNext }: { lesson: ChapterDetail; documentId: number; onNext?: () => void }) {
   const qc = useQueryClient();
-  const questions = lesson.questions.filter((q) => q.type !== "short_answer").slice(0, 5);
+  // Kiểm tra nhanh của bài: câu AI soạn cho bài này (câu hỏi của sách để dành cho phần ôn tập cuối chặng).
+  const questions = lesson.questions.filter((q) => q.type !== "short_answer" && q.origin !== "book").slice(0, 5);
   const [picked, setPicked] = useState<Record<number, string>>({});
   const [checked, setChecked] = useState(false);
   const [saving, setSaving] = useState(false);

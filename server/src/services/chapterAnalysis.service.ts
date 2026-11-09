@@ -27,7 +27,7 @@ export const analyzeError = (chapterId: number) => lastError.get(chapterId) ?? n
 /* ---------------- mục con trong sách (kiểm tra độ phủ của bài giảng) ---------------- */
 
 const treeCache = new Map<number, Promise<OutlineNode[]>>();
-function outlineTree(doc: Document) {
+export function outlineTree(doc: Document) {
   let p = treeCache.get(doc.id);
   if (!p) {
     p = readPdfMeta(pdfPath(doc.file_path)).then((m) => m.tree);

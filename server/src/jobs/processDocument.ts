@@ -8,6 +8,7 @@ import { annotateRoadmap, findNode, headingCandidates, REVIEW_TOPIC, roadmapRepo
 import { detectChaptersWithAi } from "../services/ai/content.service.js";
 import { headText } from "../services/ai/source.js";
 import { analyzeFrom } from "../services/chapterAnalysis.service.js";
+import { buildBookReviews } from "../services/bookReview.service.js";
 import { jobRunner } from "./jobRunner.js";
 import { setProgress } from "./progressBus.js";
 
@@ -126,9 +127,14 @@ async function buildRoadmap(doc: Document, meta: PdfMeta) {
   for (const s of plan) for (const l of s.lessons) l.subtopics = subtopicsOf(meta.tree, l);
   const report = roadmapReport(plan, meta.pageCount, meta.tree, source, ai);
   const { lessons, kept } = await saveRoadmap(doc, plan, report);
+  // Phần ôn tập của sách (câu hỏi + đáp án in trong sách, ý cần nắm, lab): đọc bằng code, 0 lượt AI.
+  const bookQuestions = await buildBookReviews(doc, meta.tree).catch((err) => {
+    console.warn(`[book-review] doc ${doc.id}:`, (err as Error).message);
+    return 0;
+  });
   console.log(
     `[roadmap] doc ${doc.id}: ${plan.length} chặng, ${lessons} bài (${source}${ai ? " + AI đặt tên" : ""}), ` +
-      `phủ ${report.covered}/${meta.pageCount} trang${kept ? `, giữ ${kept} bài cũ` : ""}`,
+      `phủ ${report.covered}/${meta.pageCount} trang${kept ? `, giữ ${kept} bài cũ` : ""}, ${bookQuestions} câu hỏi của sách`,
   );
 }
 

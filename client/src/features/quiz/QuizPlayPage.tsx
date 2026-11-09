@@ -6,7 +6,7 @@ import { Page } from "../../components/Layout";
 import { Badge, Button, cn, DIFFICULTY_LABEL, Empty, ProgressBar, TYPE_LABEL } from "../../components/ui";
 import { toast } from "../../stores/toast";
 import { ask, useConfirm } from "../../stores/confirm";
-import type { QuizResult, QuizSession } from "../../types";
+import type { PublicQuestion, QuizResult, QuizSession } from "../../types";
 import { ChevronLeft, ChevronRight, Clock, ListChecks } from "lucide-react";
 
 const fmt = (s: number) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
@@ -81,12 +81,22 @@ export function QuizPlayPage() {
 
   const q = session?.questions[i];
 
+  // Chọn đáp án; câu nhiều đáp án: bật/tắt từng lựa chọn, lưu theo thứ tự trong đề, nối bằng xuống dòng.
+  const choose = (question: PublicQuestion, o: string) =>
+    setAnswers((a) => {
+      if (!question.multi) return { ...a, [question.id]: o };
+      const cur = new Set((a[question.id] ?? "").split("\n").filter(Boolean));
+      if (cur.has(o)) cur.delete(o);
+      else cur.add(o);
+      return { ...a, [question.id]: (question.options ?? []).filter((x) => cur.has(x)).join("\n") };
+    });
+
   // Phím tắt: 1–4 chọn đáp án, ←/→ chuyển câu, Enter sang câu tiếp.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (!session || !q || (e.target as HTMLElement).tagName === "TEXTAREA") return;
       const n = Number(e.key);
-      if (q.options && n >= 1 && n <= q.options.length) setAnswers((a) => ({ ...a, [q.id]: q.options![n - 1] }));
+      if (q.options && n >= 1 && n <= q.options.length) choose(q, q.options[n - 1]);
       else if (e.key === "ArrowRight" || e.key === "Enter") {
         e.preventDefault();
         setI((x) => Math.min(session.questions.length - 1, x + 1));
@@ -149,19 +159,20 @@ export function QuizPlayPage() {
             />
           ) : (
             <div className="space-y-2">
+              {q.multi && <p className="text-[13px] font-medium text-brand-600">Chọn tất cả đáp án đúng.</p>}
               {q.options?.map((o, k) => {
-                const selected = answers[q.id] === o;
+                const selected = q.multi ? (answers[q.id] ?? "").split("\n").includes(o) : answers[q.id] === o;
                 return (
                   <button
                     key={k}
-                    onClick={() => setAnswers({ ...answers, [q.id]: o })}
+                    onClick={() => choose(q, o)}
                     className={cn(
                       "flex w-full items-center gap-3 rounded-xl border px-4 py-3 text-left text-[15px] transition-colors",
                       selected ? "border-brand-600 bg-brand-50 ring-1 ring-brand-600 dark:bg-brand-500/10" : "border-black/10 hover:border-black/20 dark:border-white/10 dark:hover:border-white/20",
                     )}
                   >
                     <span className={cn("grid size-7 shrink-0 place-items-center rounded-lg text-sm font-bold", selected ? "bg-brand-600 text-white" : "bg-slate-100 dark:bg-slate-800")}>
-                      {q.type === "mcq" ? "ABCD"[k] : k + 1}
+                      {q.type === "mcq" ? String.fromCharCode(65 + k) : k + 1}
                     </span>
                     {o}
                   </button>

@@ -9,7 +9,8 @@ import { isPdf, pdfPath, uploadPdf } from "../middlewares/upload.js";
 import { HttpError } from "../utils/HttpError.js";
 import { findOwnedDocument } from "../services/access.js";
 import { enqueueDocument, rebuildRoadmap } from "../jobs/processDocument.js";
-import { isAnalyzing } from "../services/chapterAnalysis.service.js";
+import { isAnalyzing, outlineTree } from "../services/chapterAnalysis.service.js";
+import { buildBookReviews } from "../services/bookReview.service.js";
 import { MAX_TRANSLATE_PAGES, translatePages } from "../services/translate.service.js";
 import {
   cancelFullTranslation,
@@ -193,6 +194,13 @@ documentRoutes.get("/:id/translation/pdf/:chunk", async (req, res) => {
   const file = chunkFile(doc, chunk);
   if (!existsSync(file)) throw new HttpError(404, "Cụm trang này chưa được dịch");
   res.type("application/pdf").sendFile(file);
+});
+
+/** Đọc lại phần ôn tập của sách (câu hỏi + đáp án in trong sách, ý cần nắm, lab) cho tài liệu đã có lộ trình. */
+documentRoutes.post("/:id/book-review", async (req, res) => {
+  const doc = await findOwnedDocument(req.params.id, req.userId);
+  const questions = await buildBookReviews(doc, await outlineTree(doc));
+  res.json({ questions, sections: await RoadmapSection.findAll({ where: { document_id: doc.id }, order: [["order_index", "ASC"]] }) });
 });
 
 /** Dịch toàn bộ PDF ở nền (theo cụm, qua Google trên trình duyệt). */

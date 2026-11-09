@@ -34,7 +34,17 @@ export type ChapterItem = {
   completed_at?: string | null;
 };
 
-export type RoadmapSection = { id: number; order_index: number; title: string; source_title?: string | null; description: string | null };
+/** Phần ôn tập của sách cho 1 chặng (server: services/bookReview.service.ts). */
+export type BookReview = {
+  questions: number;
+  /** Số câu nhiều đáp án ("Choose two") trong số câu hỏi. */
+  multi_skipped: number;
+  question_pages: { from: number; to: number } | null;
+  essentials: { text: string; page: number }[];
+  key_terms: string[];
+  labs: { title: string; from: number; to: number }[];
+};
+export type RoadmapSection = { id: number; order_index: number; title: string; source_title?: string | null; description: string | null; review?: BookReview | null };
 
 /** Đối chiếu roadmap với sách: trang được học và các đoạn bị bỏ qua (kèm tên mục trong sách). */
 export type RoadmapReport = {
@@ -89,8 +99,10 @@ export type Question = {
   topic: string;
   source_quote?: string | null;
   verified?: boolean | null;
+  /** "book": câu hỏi in trong sách, đáp án theo sách. */
+  origin?: "ai" | "book";
 };
-export type PublicQuestion = Omit<Question, "correct_answer" | "explanation">;
+export type PublicQuestion = Omit<Question, "correct_answer" | "explanation"> & { multi?: boolean };
 
 export type ChapterDetail = ChapterItem & {
   document: { id: number; title: string; page_count: number | null };

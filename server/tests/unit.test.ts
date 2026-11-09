@@ -326,3 +326,56 @@ describe("grounding (đối chiếu nội dung AI với sách)", () => {
     expect(subs.every((s) => s.from > 233 && s.to <= 238)).toBe(true);
   });
 });
+
+describe("phần ôn tập của sách (đọc bằng code)", () => {
+  const quizPage = {
+    page: 67,
+    text: [
+      "Table 1-1 Section-to-Question Mapping",
+      "1. Which of the following protocols are examples of TCP/IP transport layer protocols?",
+      "(Choose two answers.)",
+      "a. Ethernet",
+      "b. HTTP",
+      "c. UDP",
+      "d. TCP",
+      "2. The process of a web server adding a TCP header to the contents of a web page, fol-",
+      "lowed by adding an IP header, is an example of what?",
+      "a. Data encapsulation",
+      "b. Same-layer interaction",
+      "14 CCNA 200-301 Official Cert Guide, Volume 1",
+      "c. OSI model",
+      "Foundation Topics",
+      "Perspectives on Networking",
+      "1. Not a question: a numbered list in the next section",
+    ].join("\n"),
+  };
+
+  it("đọc câu hỏi + lựa chọn (vắt dòng, gạch nối, bỏ header trang), dừng ở mục kế tiếp", async () => {
+    const { parseQuestions } = await import("../src/services/bookReview.service.js");
+    const qs = parseQuestions([quizPage], "Foundation Topics");
+    expect(qs.map((q) => q.n)).toEqual([1, 2]);
+    expect(qs[0].stem).toBe("Which of the following protocols are examples of TCP/IP transport layer protocols? (Choose two answers.)");
+    expect(qs[1].stem).toContain("followed by adding an IP header");
+    expect(qs[1].options.map((o) => o.text)).toEqual(["Data encapsulation", "Same-layer interaction", "OSI model"]);
+  });
+
+  it("bảng đáp án ngắn và phụ lục có giải thích", async () => {
+    const { parseAnswerKey, parseExplainedAnswers } = await import("../src/services/bookReview.service.js");
+    const key = parseAnswerKey("blah\nAnswers to the “Do I Know This Already?” quiz:\n1 D and F 2 A 3 B, C, and E\nTechnet24");
+    expect([...key]).toEqual([[1, ["D", "F"]], [2, ["A"]], [3, ["B", "C", "E"]]]);
+    const ex = parseExplainedAnswers("1. C and D. Of the remaining answers, Ethernet defines proto-\ncols.\n2. A. Encapsulation adds a header.");
+    expect(ex.get(1)).toEqual({ letters: ["C", "D"], explanation: "Of the remaining answers, Ethernet defines protocols." });
+    expect(ex.get(2)?.letters).toEqual(["A"]);
+  });
+
+  it("thuật ngữ cần biết", async () => {
+    const { parseKeyTerms } = await import("../src/services/bookReview.service.js");
+    expect(parseKeyTerms("Key Terms You Should Know\nadjacent-layer interaction, encapsulation, frame,\nprotocol data unit (PDU), segment\nCommand References")).toEqual([
+      "adjacent-layer interaction",
+      "encapsulation",
+      "frame",
+      "protocol data unit (PDU)",
+      "segment",
+    ]);
+  });
+});

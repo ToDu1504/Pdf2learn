@@ -1,5 +1,6 @@
 import { forwardRef, useEffect, useRef, useState, type ButtonHTMLAttributes, type ReactNode } from "react";
 import { Pencil, X } from "lucide-react";
+import { createPortal } from "react-dom";
 import { useToast } from "../stores/toast";
 import { useConfirm } from "../stores/confirm";
 
@@ -94,9 +95,16 @@ export function ProgressBar({ value, className }: { value: number; className?: s
   );
 }
 
+/** Hộp thoại: vẽ thẳng vào <body> (không bị khối cha có z-index đè lên), Esc / bấm nền để đóng. */
 export function Modal({ open, onClose, title, children, wide }: { open: boolean; onClose: () => void; title: string; children: ReactNode; wide?: boolean }) {
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [open, onClose]);
   if (!open) return null;
-  return (
+  return createPortal(
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/30 p-4 backdrop-blur-sm sm:items-center" onMouseDown={onClose}>
       <div
         role="dialog"
@@ -112,7 +120,8 @@ export function Modal({ open, onClose, title, children, wide }: { open: boolean;
         </div>
         {children}
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
 

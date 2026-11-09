@@ -27,6 +27,7 @@ function QuestionCard({ q, index, onPage, chapterId }: { q: Question; index: num
         <span className="text-sm font-semibold text-slate-400">#{index + 1}</span>
         <Badge color="brand">{TYPE_LABEL[q.type]}</Badge>
         <Badge color={q.difficulty === "easy" ? "green" : q.difficulty === "hard" ? "red" : "amber"}>{DIFFICULTY_LABEL[q.difficulty]}</Badge>
+        {q.origin === "book" && <Badge color="green">Câu hỏi của sách</Badge>}
         <span className="text-xs text-slate-500">{q.topic}</span>
         <span className="ml-auto flex items-center">
         </span>
@@ -37,7 +38,7 @@ function QuestionCard({ q, index, onPage, chapterId }: { q: Question; index: num
           {q.options.map((o, i) => (
             <li
               key={i}
-              className={cn("rounded-lg px-2 py-1", open && o === q.correct_answer && "bg-emerald-50 font-medium text-emerald-800 dark:bg-emerald-500/10 dark:text-emerald-300")}
+              className={cn("rounded-lg px-2 py-1", open && q.correct_answer.split("\n").includes(o) && "bg-emerald-50 font-medium text-emerald-800 dark:bg-emerald-500/10 dark:text-emerald-300")}
             >
               {"ABCD"[i]}. {o}
             </li>
@@ -56,7 +57,7 @@ function QuestionCard({ q, index, onPage, chapterId }: { q: Question; index: num
         <div className="mt-3 rounded-xl bg-emerald-50 p-3 text-sm dark:bg-emerald-500/10">
           <p className="flex items-start justify-between gap-2 font-semibold text-emerald-800 dark:text-emerald-300">
             <span>
-              Đáp án: {q.correct_answer}
+              Đáp án: {q.correct_answer.replace(/\n/g, "; ")}
               <PageLink page={q.source_page} onPage={onPage} quote={q.source_quote} verified={q.verified} />
             </span>
           </p>

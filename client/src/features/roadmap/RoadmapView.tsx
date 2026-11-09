@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import { ArrowRight, BookCheck, Check, ChevronDown, CircleAlert, Clock } from "lucide-react";
 import { Button, cn, EditableTitle, ProgressBar, Spinner } from "../../components/ui";
 import type { ChapterItem, DocumentDetail, RoadmapReport } from "../../types";
+import { BookReviewActions } from "./BookReview";
 
 export type LessonState = "completed" | "ready" | "analyzing" | "failed" | "new";
 
@@ -200,6 +201,9 @@ export function RoadmapView({ doc, onOpen, onRenameSection }: { doc: DocumentDet
                     <p className="mt-1 text-[12px] text-slate-400">
                       {finished}/{lessons.length} bài
                     </p>
+                    {section.review && (
+                      <BookReviewActions review={section.review} documentId={doc.id} lessonIds={lessons.map((l) => l.id)} sectionTitle={section.title} />
+                    )}
                   </div>
                 </div>
 
