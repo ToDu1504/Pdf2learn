@@ -109,9 +109,6 @@ export type Flashcard = {
 };
 
 export type Settings = {
-  tts_voice: string;
-  tts_rate: number;
-  auto_read_tutor: boolean;
   theme: "light" | "dark" | "system";
 };
 
@@ -134,10 +131,3 @@ export type TutorMessage = {
 };
 export type TutorSession = { id: number; title: string; document_id: number; created_at: string };
 
-export type AudioSegment = {
-  text: string;
-  hash: string;
-  audioUrl: string;
-  status: "pending" | "done" | "failed";
-  durationMs: number | null;
-};

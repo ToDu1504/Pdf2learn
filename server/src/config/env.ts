@@ -22,13 +22,8 @@ const schema = z.object({
   BATCH_MAX_CHARS: z.coerce.number().int().min(20_000).default(350_000),
   UPLOAD_DIR: z.string().default("./uploads"),
   MAX_UPLOAD_MB: z.coerce.number().default(50),
-  TTS_URL: z.string().default("http://localhost:8000/v1"),
   // VI-Translate (dịch PDF giữ bố cục), clone vào thư mục này + .venv. Không có thì tab Bản dịch dùng Gemini dịch chữ.
   VI_TRANSLATE_DIR: z.string().default("../vi-translate"),
-  TTS_MODEL: z.string().default("vieneu-v3-turbo"),
-  TTS_DEFAULT_VOICE: z.string().default("Hải Đăng"),
-  TTS_CACHE_MAX_GB: z.coerce.number().default(2),
-  TTS_UNUSED_DAYS: z.coerce.number().default(30),
 });
 
 const parsed = schema.parse(process.env);

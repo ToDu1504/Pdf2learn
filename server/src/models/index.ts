@@ -43,17 +43,11 @@ User.init(
 export type Theme = "light" | "dark" | "system";
 export class UserSettings extends Model<InferAttributes<UserSettings>, InferCreationAttributes<UserSettings>> {
   declare user_id: number;
-  declare tts_voice: CreationOptional<string>;
-  declare tts_rate: CreationOptional<number>;
-  declare auto_read_tutor: CreationOptional<boolean>;
   declare theme: CreationOptional<Theme>;
 }
 UserSettings.init(
   {
     user_id: { type: DataTypes.INTEGER, primaryKey: true },
-    tts_voice: { ...str(), defaultValue: "Hải Đăng" },
-    tts_rate: { type: DataTypes.FLOAT, allowNull: false, defaultValue: 1 },
-    auto_read_tutor: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: false },
     theme: { type: DataTypes.ENUM("light", "dark", "system"), allowNull: false, defaultValue: "system" },
   },
   { sequelize, tableName: "user_settings" },
@@ -320,51 +314,6 @@ TutorMessage.init(
   { sequelize, tableName: "tutor_messages" },
 );
 
-/* ---------------- TTS ---------------- */
-
-export class TtsAudio extends Model<InferAttributes<TtsAudio>, InferCreationAttributes<TtsAudio>> {
-  declare id: CreationOptional<number>;
-  declare hash: string;
-  declare voice: string;
-  declare text: string;
-  declare file_path: CreationOptional<string | null>;
-  declare duration_ms: CreationOptional<number | null>;
-  declare size_bytes: CreationOptional<number | null>;
-  declare status: CreationOptional<"pending" | "done" | "failed">;
-  declare last_used_at: CreationOptional<Date>;
-}
-TtsAudio.init(
-  {
-    id: pk,
-    hash: { type: DataTypes.CHAR(64), allowNull: false, unique: true },
-    voice: str(),
-    text: text(),
-    file_path: str(true),
-    duration_ms: int(true),
-    size_bytes: int(true),
-    status: { type: DataTypes.ENUM("pending", "done", "failed"), defaultValue: "pending" },
-    last_used_at: { type: DataTypes.DATE, defaultValue: DataTypes.NOW },
-  },
-  { sequelize, tableName: "tts_audios" },
-);
-
-export class ChapterAudioSegment extends Model<
-  InferAttributes<ChapterAudioSegment>,
-  InferCreationAttributes<ChapterAudioSegment>
-> {
-  declare id: CreationOptional<number>;
-  declare chapter_id: number;
-  declare voice: string;
-  declare order_index: number;
-  declare display_text: string;
-  declare tts_audio_id: number;
-  declare audio?: TtsAudio;
-}
-ChapterAudioSegment.init(
-  { id: pk, chapter_id: int(), voice: str(), order_index: int(), display_text: text(), tts_audio_id: int() },
-  { sequelize, tableName: "chapter_audio_segments" },
-);
-
 /* ---------------- text từng trang (trích bằng pdfjs) ---------------- */
 
 export class DocumentPage extends Model<InferAttributes<DocumentPage>, InferCreationAttributes<DocumentPage>> {
@@ -420,4 +369,3 @@ AttemptAnswer.belongsTo(QuizAttempt, { foreignKey: "attempt_id", as: "attempt" }
 AttemptAnswer.belongsTo(Question, { foreignKey: "question_id", as: "question" });
 Flashcard.belongsTo(Chapter, { foreignKey: "chapter_id", as: "chapter" });
 TutorSession.hasMany(TutorMessage, { foreignKey: "session_id", as: "messages" });
-ChapterAudioSegment.belongsTo(TtsAudio, { foreignKey: "tts_audio_id", as: "audio" });

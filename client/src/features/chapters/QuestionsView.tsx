@@ -4,12 +4,8 @@ import { errorMessage, http } from "../../api/client";
 import { Badge, Button, cn, DIFFICULTY_LABEL, Empty, TYPE_LABEL } from "../../components/ui";
 import { toast } from "../../stores/toast";
 import type { ChapterDetail, Difficulty, Question, QuestionType } from "../../types";
-import { SpeakButton } from "../audio/SpeakButton";
 import { PageLink, type OpenPages } from "./SummaryView";
 import { CircleHelp, Sparkles } from "lucide-react";
-
-export const questionSpeech = (q: Pick<Question, "content" | "options">) =>
-  [q.content, ...(q.options && q.options.length > 2 ? q.options.map((o, i) => `Đáp án ${"ABCD"[i] ?? i + 1}: ${o}.`) : [])].join(" ");
 
 function QuestionCard({ q, index, onPage, chapterId }: { q: Question; index: number; onPage: OpenPages; chapterId: number }) {
   const [open, setOpen] = useState(false);
@@ -32,7 +28,6 @@ function QuestionCard({ q, index, onPage, chapterId }: { q: Question; index: num
         <Badge color={q.difficulty === "easy" ? "green" : q.difficulty === "hard" ? "red" : "amber"}>{DIFFICULTY_LABEL[q.difficulty]}</Badge>
         <span className="text-xs text-slate-500">{q.topic}</span>
         <span className="ml-auto flex items-center">
-          <SpeakButton text={questionSpeech(q)} title="Câu hỏi" />
         </span>
       </div>
       <p className="font-medium">{q.content}</p>
@@ -63,7 +58,6 @@ function QuestionCard({ q, index, onPage, chapterId }: { q: Question; index: num
               Đáp án: {q.correct_answer}
               <PageLink page={q.source_page} onPage={onPage} />
             </span>
-            <SpeakButton text={`Đáp án: ${q.correct_answer}. ${q.explanation}`} title="Giải thích" />
           </p>
           <p className="mt-1 text-slate-700 dark:text-slate-300">{q.explanation}</p>
         </div>

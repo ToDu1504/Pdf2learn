@@ -4,12 +4,10 @@ import { useQueryClient } from "@tanstack/react-query";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { errorMessage, http, postStream } from "../../api/client";
-import { useDocument, useSettings, useTtsStatus, useTutorSession, useTutorSessions, useUpdateSettings } from "../../api/queries";
+import { useDocument, useTutorSession, useTutorSessions } from "../../api/queries";
 import { Button, cn, Empty, Spinner } from "../../components/ui";
 import { toast } from "../../stores/toast";
 import type { TutorMessage, TutorQuiz, TutorSession } from "../../types";
-import { fetchSpeech, usePlayer } from "../audio/playerStore";
-import { SpeakButton } from "../audio/SpeakButton";
 import { ChevronLeft, MessageCircle, Sparkles, Wrench, X } from "lucide-react";
 
 type StreamEvent =
@@ -38,51 +36,6 @@ const fromServer = (m: TutorMessage): ChatItem => ({
   quizzes: (m.tool_calls ?? []).flatMap((t) => (t.quiz ? [t.quiz] : [])),
   tools: [],
 });
-
-/** Gom text đang stream thành câu hoàn chỉnh rồi đọc nối tiếp. */
-function useAutoReader(enabled: boolean) {
-  const buffer = useRef("");
-  const chain = useRef(Promise.resolve());
-  const started = useRef(false);
-
-  const speak = (text: string) => {
-    const clean = text.trim();
-    if (!clean) return;
-    chain.current = chain.current.then(async () => {
-      try {
-        const segments = await fetchSpeech(clean);
-        const p = usePlayer.getState();
-        if (!started.current || p.source?.kind !== "tutor") {
-          started.current = true;
-          p.load(segments, { title: "Gia sư AI", source: { kind: "tutor" } });
-        } else p.append(segments);
-      } catch {
-        /* TTS lỗi: bỏ qua, vẫn hiển thị chữ */
-      }
-    });
-  };
-
-  return {
-    reset() {
-      buffer.current = "";
-      started.current = false;
-    },
-    push(delta: string) {
-      if (!enabled) return;
-      buffer.current += delta;
-      // Bỏ code block khỏi phần đọc; tách tại dấu kết câu theo sau là khoảng trắng.
-      const m = /^([\s\S]{20,}?[.!?…])\s+/.exec(buffer.current);
-      if (m && !/```/.test(m[1])) {
-        speak(m[1]);
-        buffer.current = buffer.current.slice(m[0].length);
-      }
-    },
-    flush() {
-      if (enabled) speak(buffer.current);
-      buffer.current = "";
-    },
-  };
-}
 
 function QuizCard({ quiz }: { quiz: TutorQuiz }) {
   const [picked, setPicked] = useState<Record<number, string>>({});
@@ -169,7 +122,6 @@ function Bubble({ item }: { item: ChatItem }) {
           {item.streaming && item.content && <span className="ml-0.5 inline-block h-4 w-1.5 animate-pulse bg-brand-500 align-middle" />}
           {!item.streaming && item.content && (
             <div className="mt-1 flex justify-end">
-              <SpeakButton text={item.content} title="Gia sư AI" />
             </div>
           )}
         </div>
@@ -193,11 +145,6 @@ export function TutorPage() {
   const [sending, setSending] = useState(false);
   const abort = useRef<AbortController | null>(null);
   const bottom = useRef<HTMLDivElement>(null);
-  const settings = useSettings();
-  const updateSettings = useUpdateSettings();
-  const tts = useTtsStatus();
-  const autoRead = !!settings.data?.auto_read_tutor && !!tts.data?.online;
-  const reader = useAutoReader(autoRead);
 
   useEffect(() => {
     if (!sessionId && sessions.data?.length) setSessionId(sessions.data[0].id);
@@ -230,7 +177,6 @@ export function TutorPage() {
     if (!sid) return;
     setInput("");
     setSending(true);
-    reader.reset();
     const modelId = `m${Date.now()}`;
     setItems((xs) => [...xs, { id: `u${Date.now()}`, role: "user", content, quizzes: [], tools: [] }, { id: modelId, role: "model", content: "", quizzes: [], tools: [], streaming: true }]);
     const patch = (fn: (m: ChatItem) => ChatItem) => setItems((xs) => xs.map((x) => (x.id === modelId ? fn(x) : x)));
@@ -243,7 +189,6 @@ export function TutorPage() {
         (e) => {
           if (e.type === "text") {
             patch((m) => ({ ...m, content: m.content + e.delta }));
-            reader.push(e.delta);
           } else if (e.type === "tool") patch((m) => ({ ...m, tools: [...m.tools, e.name] }));
           else if (e.type === "quiz") patch((m) => ({ ...m, quizzes: [...m.quizzes, { chapterTitle: e.chapterTitle, questions: e.questions }] }));
           else if (e.type === "error") {
@@ -253,7 +198,6 @@ export function TutorPage() {
         },
         abort.current.signal,
       );
-      reader.flush();
     } catch (err) {
       if (!abort.current.signal.aborted) {
         toast.error(errorMessage(err));
@@ -315,12 +259,6 @@ export function TutorPage() {
             <p className="truncate text-xs text-slate-500">Trả lời dựa trên “{doc.data?.title}”, có trích dẫn trang</p>
           </div>
           <div className="flex items-center gap-2">
-            {tts.data?.online && (
-              <label className="flex cursor-pointer items-center gap-2 text-sm">
-                <input type="checkbox" checked={!!settings.data?.auto_read_tutor} onChange={(e) => updateSettings.mutate({ auto_read_tutor: e.target.checked })} />
-                Tự đọc
-              </label>
-            )}
             <Button size="sm" variant="ghost" className="md:hidden" onClick={newSession}>
               + Mới
             </Button>

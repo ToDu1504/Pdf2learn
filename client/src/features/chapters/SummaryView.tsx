@@ -1,13 +1,6 @@
-import { useEffect, useRef, useState } from "react";
-import { download, errorMessage, http } from "../../api/client";
-import { useTtsStatus } from "../../api/queries";
-import { Button, cn } from "../../components/ui";
-import { toast } from "../../stores/toast";
-import type { AudioSegment, ChapterDetail } from "../../types";
+import { useEffect } from "react";
+import type { ChapterDetail } from "../../types";
 import { targetId, type SummaryTarget } from "./matchNode";
-import { usePlayer } from "../audio/playerStore";
-import { SpeakButton, TtsOfflineHint } from "../audio/SpeakButton";
-import { Download, Play, RotateCcw } from "lucide-react";
 
 /** Mở trang (hoặc khoảng trang) trong PDF gốc. */
 export type OpenPages = (from: number, to?: number) => void;
@@ -21,38 +14,6 @@ export function PageLink({ page, end, onPage }: { page: number; end?: number; on
     >
       tr. {page}
     </button>
-  );
-}
-
-/** Bản đọc của chương: highlight câu đang đọc, bấm câu để tua tới. */
-function Transcript() {
-  const { segments, index, seek } = usePlayer();
-  const refs = useRef<(HTMLButtonElement | null)[]>([]);
-  useEffect(() => {
-    refs.current[index]?.scrollIntoView({ block: "nearest", behavior: "smooth" });
-  }, [index]);
-  return (
-    <div className="max-h-72 space-y-1 overflow-y-auto rounded-xl bg-slate-50 p-3 dark:bg-slate-800/40">
-      {segments.map((s, i) => (
-        <button
-          key={i}
-          ref={(el) => {
-            refs.current[i] = el;
-          }}
-          onClick={() => seek(i)}
-          className={cn(
-            "block w-full rounded-lg px-2 py-1 text-left text-sm transition",
-            i === index
-              ? "bg-brand-600 font-medium text-white shadow"
-              : i < index
-                ? "text-slate-400 hover:bg-white dark:hover:bg-slate-800"
-                : "text-slate-700 hover:bg-white dark:text-slate-300 dark:hover:bg-slate-800",
-          )}
-        >
-          {s.text}
-        </button>
-      ))}
-    </div>
   );
 }
 
@@ -71,48 +32,11 @@ export function SummaryView({ chapter, onPage, focus }: { chapter: ChapterDetail
   }, [focus]);
 
   const s = chapter.summary!;
-  const tts = useTtsStatus();
-  const [loading, setLoading] = useState(false);
-  const source = usePlayer((p) => p.source);
-  const listening = source?.kind === "chapter" && source.chapterId === chapter.id;
-
-  const listen = async () => {
-    setLoading(true);
-    try {
-      const { data } = await http.post<AudioSegment[]>(`/chapters/${chapter.id}/audio`, {});
-      usePlayer.getState().load(data, { title: chapter.title, source: { kind: "chapter", chapterId: chapter.id } });
-    } catch (err) {
-      toast.error(errorMessage(err));
-    } finally {
-      setLoading(false);
-    }
-  };
-
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-center gap-2">
-        {tts.data?.online ? (
-          <>
-            <Button onClick={listen} loading={loading} variant={listening ? "secondary" : "primary"}>
-              {listening ? <><RotateCcw /> Nghe lại từ đầu</> : <><Play fill="currentColor" /> Nghe bài</>}
-            </Button>
-            <Button
-              variant="ghost"
-              onClick={() => download(`/chapters/${chapter.id}/audio/download`, "chuong.wav").catch((e) => toast.error(errorMessage(e)))}
-            >
-              <Download /> Tải audio
-            </Button>
-          </>
-        ) : (
-          <TtsOfflineHint />
-        )}
-      </div>
-
-      {listening && <Transcript />}
-
       <section id="sum-overview">
         <h3 className="mb-2 flex items-center gap-1 text-sm font-semibold tracking-wide text-slate-500 uppercase">
-          Tổng quan <SpeakButton text={s.overview} title="Tổng quan" />
+          Tổng quan
         </h3>
         <p className="leading-7">{s.overview}</p>
       </section>
@@ -127,7 +51,6 @@ export function SummaryView({ chapter, onPage, focus }: { chapter: ChapterDetail
                 {k.point}
                 <PageLink page={k.page} end={k.page_end} onPage={onPage} />
               </p>
-              <SpeakButton text={k.point} title="Ý chính" />
             </li>
           ))}
         </ul>
@@ -144,7 +67,6 @@ export function SummaryView({ chapter, onPage, focus }: { chapter: ChapterDetail
                     {t.term}
                     <PageLink page={t.page} end={t.page_end} onPage={onPage} />
                   </span>
-                  <SpeakButton text={`${t.term}: ${t.definition}`} title="Khái niệm" />
                 </dt>
                 <dd className="mt-1 text-sm text-slate-600 dark:text-slate-400">{t.definition}</dd>
               </div>

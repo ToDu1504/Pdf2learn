@@ -6,8 +6,6 @@ import { Page } from "../../components/Layout";
 import { Badge, Button, cn, DIFFICULTY_LABEL, Empty, ProgressBar, TYPE_LABEL } from "../../components/ui";
 import { toast } from "../../stores/toast";
 import type { QuizResult, QuizSession } from "../../types";
-import { SpeakButton } from "../audio/SpeakButton";
-import { questionSpeech } from "../chapters/QuestionsView";
 import { ChevronLeft, ChevronRight, Clock, ListChecks } from "lucide-react";
 
 const fmt = (s: number) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
@@ -136,7 +134,6 @@ export function QuizPlayPage() {
             <Badge color="brand">{TYPE_LABEL[q.type]}</Badge>
             <Badge>{DIFFICULTY_LABEL[q.difficulty]}</Badge>
             <span className="ml-auto">
-              <SpeakButton text={questionSpeech(q)} title={`Câu ${i + 1}`} />
             </span>
           </div>
           <h2 className="mb-5 text-lg leading-7 font-semibold">{q.content}</h2>

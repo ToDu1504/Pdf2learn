@@ -14,7 +14,6 @@ const FlashcardsPage = lazy(() => import("./features/flashcards/FlashcardsPage")
 const StatsPage = lazy(() => import("./features/stats/StatsPage").then((m) => ({ default: m.StatsPage })));
 const TutorPage = lazy(() => import("./features/tutor/TutorPage").then((m) => ({ default: m.TutorPage })));
 const SettingsPage = lazy(() => import("./features/settings/SettingsPage").then((m) => ({ default: m.SettingsPage })));
-const HandsFreePage = lazy(() => import("./features/audio/HandsFreePage").then((m) => ({ default: m.HandsFreePage })));
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
@@ -47,7 +46,6 @@ export default function App() {
             <Route path="quiz/:id" element={<QuizPlayPage />} />
             <Route path="quiz/:id/result" element={<QuizResultPage />} />
             <Route path="flashcards" element={<FlashcardsPage />} />
-            <Route path="hands-free" element={<HandsFreePage />} />
             <Route path="stats" element={<StatsPage />} />
             <Route path="settings" element={<SettingsPage />} />
           </Route>

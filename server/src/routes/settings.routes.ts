@@ -1,6 +1,5 @@
 import { Router } from "express";
 import { z } from "zod";
-import { env } from "../config/env.js";
 import { UserSettings } from "../models/index.js";
 import { auth } from "../middlewares/auth.js";
 
@@ -10,16 +9,13 @@ settingsRoutes.use(auth);
 export async function getSettings(userId: number) {
   const [settings] = await UserSettings.findOrCreate({
     where: { user_id: userId },
-    defaults: { user_id: userId, tts_voice: env.TTS_DEFAULT_VOICE },
+    defaults: { user_id: userId },
   });
   return settings;
 }
 
 const patchBody = z
   .object({
-    tts_voice: z.string().min(1).max(100),
-    tts_rate: z.number().min(0.75).max(2),
-    auto_read_tutor: z.boolean(),
     theme: z.enum(["light", "dark", "system"]),
   })
   .partial();

@@ -4,13 +4,9 @@ import { writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { sm2 } from "../src/services/srs.service.js";
-import { splitSentences } from "../src/services/tts/sentenceSplitter.js";
-import { normalizeForSpeech } from "../src/services/tts/textNormalizer.js";
 import { buildRanges, cutChapterPdf, fixedRanges, readPdfMeta, toDocumentPage } from "../src/services/pdf.service.js";
-import { concatWav, parseWav } from "../src/services/tts/wav.js";
 import { AnalysisZod, QuizZod, MindmapZod } from "../src/services/ai/schemas.js";
 import { isDailyQuotaError, withRetry } from "../src/utils/withRetry.js";
-import { PRIORITY, ttsQueue } from "../src/services/tts/ttsQueue.js";
 
 describe("sm2", () => {
   const fresh = { ease_factor: 2.5, interval_days: 0, repetitions: 0 };
@@ -28,35 +24,6 @@ describe("sm2", () => {
     expect(card.repetitions).toBe(0);
     expect(card.interval_days).toBe(1);
     expect(card.ease_factor).toBe(1.3);
-  });
-});
-
-describe("splitSentences", () => {
-  it("không tách ở số thập phân, viết tắt và dấu hai chấm", () => {
-    const s = splitSentences("Giá trị pi là 3.14 theo TS. Nguyễn Văn A. Định nghĩa: hệ điều hành quản lý tài nguyên.");
-    expect(s).toEqual(["Giá trị pi là 3.14 theo TS. Nguyễn Văn A.", "Định nghĩa: hệ điều hành quản lý tài nguyên."]);
-  });
-  it("cắt câu dài, không đoạn nào vượt maxLen", () => {
-    const long = Array.from({ length: 30 }, (_, i) => `mệnh đề số ${i}`).join(", ") + ".";
-    const parts = splitSentences(long, 100);
-    expect(parts.length).toBeGreaterThan(1);
-    parts.forEach((p) => expect(p.length).toBeLessThanOrEqual(100));
-    expect(parts.join(" ").replace(/\s+/g, " ")).toBe(long);
-  });
-  it("gộp câu quá ngắn vào câu trước", () => {
-    expect(splitSentences("Đây là một câu đủ dài để đứng riêng. Đúng.")).toEqual(["Đây là một câu đủ dài để đứng riêng. Đúng."]);
-  });
-});
-
-describe("normalizeForSpeech", () => {
-  it("bỏ markdown, trích dẫn trang, code; mở rộng viết tắt theo ranh giới từ", () => {
-    const out = normalizeForSpeech("**CSDL** là kho dữ liệu (tr. 12). VD: MySQL đạt 50%.\n```sql\nSELECT 1\n```");
-    expect(out).toContain("cơ sở dữ liệu là kho dữ liệu");
-    expect(out).toContain("ví dụ: MySQL đạt 50 phần trăm");
-    expect(out).not.toMatch(/tr\. 12|\*|SELECT/);
-  });
-  it("không thay viết tắt nằm giữa từ", () => {
-    expect(normalizeForSpeech("VDSL khác VD")).toBe("VDSL khác ví dụ");
   });
 });
 
@@ -118,14 +85,6 @@ function makeWav(samples: number, rate = 48000) {
   return Buffer.concat([b, data]);
 }
 
-describe("wav", () => {
-  it("đọc thời lượng và ghép file", () => {
-    expect(parseWav(makeWav(48000)).durationMs).toBe(1000);
-    const joined = concatWav([makeWav(48000), makeWav(24000)]);
-    expect(parseWav(joined).durationMs).toBe(1500);
-  });
-});
-
 describe("QuizZod", () => {
   it("giữ câu hợp lệ, bỏ câu có đáp án không nằm trong options", () => {
     const base = { difficulty: "easy", explanation: "x", source_page: 1, topic: "t" };
@@ -168,29 +127,6 @@ describe("quota", () => {
     });
     expect(out.summary.overview).toBe("o");
     expect(out.questions).toHaveLength(1);
-  });
-});
-
-describe("ttsQueue", () => {
-  it("chạy 1 luồng, gộp trùng key, ưu tiên task người dùng đang nghe", async () => {
-    const order: string[] = [];
-    let active = 0;
-    const job = (k: string) => async () => {
-      active++;
-      expect(active).toBe(1);
-      await new Promise((r) => setTimeout(r, 5));
-      order.push(k);
-      active--;
-    };
-    const runs = { a: 0 };
-    const a = ttsQueue.enqueue("a", async () => { runs.a++; await job("a")(); });
-    const a2 = ttsQueue.enqueue("a", async () => { runs.a++; });
-    const b = ttsQueue.enqueue("b", job("b"));
-    const c = ttsQueue.enqueue("c", job("c"));
-    ttsQueue.enqueue("c", job("c"), PRIORITY.listening);
-    await Promise.all([a, a2, b, c]);
-    expect(runs.a).toBe(1);
-    expect(order).toEqual(["a", "c", "b"]);
   });
 });
 

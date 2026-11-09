@@ -18,7 +18,7 @@ type Translation = { from: number; to: number; pages: { page: number; text: stri
 
 type ChunkStatus =
   | { available: false }
-  | { available: true; chunk: number; from: number; to: number; phase: "queued" | "extracting" | "translating" | "building" | "ready" | "error"; done: number; total: number; error?: string };
+  | { available: true; chunk: number; from: number; to: number; phase: "queued" | "extracting" | "translating" | "building" | "ready" | "error"; done: number; total: number; unit?: "page" | "segment"; error?: string };
 
 const CHUNK = 10; // khớp CHUNK ở server (pdfTranslate.service.ts)
 const PHASE_LABEL = { queued: "Đang chờ tới lượt", extracting: "Đang phân tích bố cục trang", translating: "Đang dịch", building: "Đang dựng lại PDF tiếng Việt" } as const;
@@ -64,10 +64,11 @@ function TranslatedChunk({ documentId, pages, width, onUnavailable }: { document
         <div>
           <Spinner className="mx-auto mb-3 size-6" />
           {PHASE_LABEL[phase as keyof typeof PHASE_LABEL] ?? "Đang chuẩn bị"}
-          {d?.available && phase === "translating" && d.total > 0 && ` ${d.done}/${d.total} đoạn`}
+          {d?.available && phase === "translating" && d.total > 0 && ` ${d.done}/${d.total} ${d.unit === "page" ? "trang" : "đoạn"}`}
           {d?.available && (
-            <p className="mt-1 text-[12px] text-slate-400">
+            <p className="mx-auto mt-1 max-w-sm text-[12px] text-slate-400">
               Dịch cả cụm trang {d.from}–{d.to}, giữ nguyên hình, bảng và bố cục. Lần sau mở lại ngay.
+              {phase === "translating" && d.unit === "page" && " Nếu cửa sổ trình duyệt bật lên đòi xác minh của Google, hãy hoàn tất để dịch tiếp."}
             </p>
           )}
         </div>

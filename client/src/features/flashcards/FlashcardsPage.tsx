@@ -6,7 +6,6 @@ import { useDocuments, useDueCards } from "../../api/queries";
 import { Page } from "../../components/Layout";
 import { Button, cn, Empty, ProgressBar, Skeleton } from "../../components/ui";
 import { toast } from "../../stores/toast";
-import { SpeakButton } from "../audio/SpeakButton";
 import { CircleCheck } from "lucide-react";
 
 // SM-2: Quên (1) · Khó (3) · Tốt (4) · Dễ (5); phím tắt 1–4.
@@ -57,7 +56,7 @@ export function FlashcardsPage() {
     const onKey = (e: KeyboardEvent) => {
       if ((e.target as HTMLElement).tagName === "SELECT") return;
       if (e.code === "Space" || e.key === "Enter") {
-        e.preventDefault(); // không để MiniPlayer bắt Space
+        e.preventDefault(); // không để trang cuộn khi bấm Space
         setFlipped((f) => !f);
       } else if (flipped) {
         const g = GRADES.find((x) => x.key === e.key);
@@ -109,13 +108,11 @@ export function FlashcardsPage() {
                 <div className="flip-face card absolute inset-0 flex flex-col items-center justify-center p-8 text-center">
                   <p className="text-xs font-semibold tracking-wide text-slate-400 uppercase">Mặt trước</p>
                   <p className="mt-3 text-2xl font-bold">{card.front}</p>
-                  <SpeakButton text={card.front} title="Flashcard" className="mt-4" />
                   <p className="absolute bottom-4 text-xs text-slate-400">Bấm hoặc Space để lật</p>
                 </div>
                 <div className="flip-face flip-back card absolute inset-0 flex flex-col items-center justify-center overflow-y-auto bg-brand-50 p-8 text-center dark:bg-slate-800">
                   <p className="text-xs font-semibold tracking-wide text-slate-400 uppercase">{card.front}</p>
                   <p className="mt-3 text-lg leading-7">{card.back}</p>
-                  <SpeakButton text={card.back} title="Flashcard" className="mt-4" />
                 </div>
               </div>
             </div>

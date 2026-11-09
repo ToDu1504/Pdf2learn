@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project
 
-**Pdf2Learn** (formerly StudyAI): a local-only web app that turns PDF textbooks into chapter summaries, quizzes, flashcards, an AI tutor, and Vietnamese text-to-speech. The original design doc is [AI-Study-PDF-Plan.md](AI-Study-PDF-Plan.md) (Vietnamese). The code has deliberately diverged from it in a few places, listed under "Deviations from the plan". User-facing text (UI, prompts, AI output, error messages) is Vietnamese.
+**Pdf2Learn** (formerly StudyAI): a local-only web app that turns PDF textbooks into chapter summaries, quizzes, flashcards, an AI tutor, and layout-preserving Vietnamese translation of the PDF. (Vietnamese text-to-speech was removed on 2026-11-09 to keep the app light; migration `20261109000007-drop-tts` drops its tables.) The original design doc is [AI-Study-PDF-Plan.md](AI-Study-PDF-Plan.md) (Vietnamese). The code has deliberately diverged from it in a few places, listed under "Deviations from the plan". User-facing text (UI, prompts, AI output, error messages) is Vietnamese.
 
 ## Stack and constraints
 
@@ -13,8 +13,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - DB: works on **both MySQL 8 and MariaDB** (the dev machine now runs Laragon MySQL 8.4; it previously ran XAMPP MariaDB 10.4). Two consequences:
   - MariaDB returns JSON columns as strings, so the `json(field)` helper in `models/index.ts` parses them in a getter.
   - MariaDB rejects arithmetic on aggregate aliases in `ORDER BY`. Repeat the aggregate expression instead.
-- `tts-service/`: a gitignored clone of VieNeu-TTS (Python, `uv`) with an OpenAI-compatible API at `localhost:8000/v1`.
-- `vi-translate/`: a gitignored clone of [VI-Translate](https://github.com/breslee1707/VI-Translate) (layout-preserving PDF translator, AGPL) with a Python 3.12 `.venv`. Setup: `git clone https://github.com/breslee1707/VI-Translate vi-translate`, then `uv venv --python 3.12 .venv` and `uv pip install --python .venv/Scripts/python.exe -r requirements.txt` with `UV_CACHE_DIR`/`UV_PYTHON_INSTALL_DIR` under `.cache/` so drive C stays clean.
+- `vi-translate/`: a gitignored clone of [VI-Translate](https://github.com/breslee1707/VI-Translate) (layout-preserving PDF translator, AGPL) with a Python 3.12 `.venv`. Setup: `git clone https://github.com/breslee1707/VI-Translate vi-translate`, then `uv venv --python 3.12 .venv` and `uv pip install --python .venv/Scripts/python.exe -r requirements.txt websocket-client==1.9.0` with `UV_CACHE_DIR`/`UV_PYTHON_INSTALL_DIR` under `.cache/` so drive C stays clean.
 - AI: Gemini via `@google/genai`. Read `GEMINI_MODEL` and `GEMINI_API_KEY` from `env` in `server/src/config/env.ts` (validated; placeholder values like `your_key_here` count as unset). Never read `process.env` directly and never hardcode a model.
 - **No Docker, no Redis/BullMQ.** Keep the backend to one Express process.
 
@@ -22,8 +21,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ```bash
 npm run install:all          # root: install root + server + client deps
-npm run dev:no-tts           # server (:5000) + client (:5173)
-npm run dev                  # same + VieNeu TTS (needs tts-service/ cloned + uv sync)
+npm run dev                  # server (:5000) + client (:5173)
 cd server && npm run typecheck
 cd server && npm test        # vitest (tests/unit.test.ts); single: npx vitest run -t "sm2"
 cd server && npm run db:create && npm run db:migrate   # config in server/db.config.cjs
@@ -53,15 +51,11 @@ Only the tutor (`services/ai/tutor.agent.ts`) is an agent. It uses function call
 
 **Page numbers.** Always map AI page numbers through `src.toPage()` from `chapterSource`. In text mode, pages are absolute (`[Trang N]` markers, clamped to the chapter); in file mode, `toDocumentPage` converts chapter-relative pages. The UI’s "click page → open original PDF" depends on this.
 
-**TTS path** (`services/tts/`):
-- `normalizeForSpeech` → `splitSentences` → each sentence is keyed by `sha256(model+voice+text)` in `tts_audios`, with the file at `uploads/audio/<hash>.wav`.
-- `ttsQueue` runs a single worker with priority (listening > prefetch) and deduplicates by hash. VieNeu on CPU returns 429 for parallel requests.
-- `GET /tts/audio/:hash` is unauthenticated, because `<audio>` can't send headers and the hash isn't guessable. It **long-polls**: if the audio isn't ready, it bumps that sentence to high priority, waits, then serves the file with Range support. The client just sets `audio.src`.
-- Cache eviction is LRU by `last_used_at`. An evicted row goes back to `pending` and is regenerated on demand.
+**PDF translation** (`services/translate/`): the PdfViewer "Bản dịch" tab renders a Vietnamese PDF with the original layout. `pdfTranslate.service` works in 10-page chunks, on demand, one chunk at a time, and prefetches the next chunk in the background (a chunk the user opens jumps ahead of prefetches). Each chunk is cut with `scripts/pdf_chunk.py` (PyMuPDF), then:
+1. **Primary:** VI-Translate's Google engine with `--google-browser`, like its desktop app. It drives the installed Edge/Chrome, so Google sees a real browser; on CAPTCHA a browser window opens for the user to solve. No Gemini quota is used. Progress comes from tqdm on stderr (pages). Needs `websocket-client` in the venv (from `requirements-app.txt`).
+2. **Fallback** (not used for prefetch, to save quota): **handoff** mode. The engine emits segments, `segmentTranslator` translates them (Google `translate.googleapis.com` gtx in batches; on 429/redirect it pauses Google for 10 min and uses Gemini in ~20k-char groups), then the engine rebuilds the PDF. `<bN>`/`<sN>` tags are kept by translating only the text between them. Any failed group fails the chunk instead of caching a half-English PDF.
 
-**PDF translation** (`services/translate/`): the PdfViewer "Bản dịch" tab renders a Vietnamese PDF with the original layout. `pdfTranslate.service` works in 10-page chunks, on demand, one chunk at a time: cut the pages (`scripts/pdf_chunk.py`, PyMuPDF), run VI-Translate in **handoff** mode to emit segments, translate them in `segmentTranslator` (Google `translate.googleapis.com` gtx, many segments per request; on 429/redirect it pauses Google for 10 min and falls back to Gemini), then rebuild the PDF. Its own `translate.google.com/m` engine is not used because that endpoint is CAPTCHA-blocked on this network. `<bN>`/`<sN>` tags are kept by translating only the text between them. Output goes to `uploads/translated/<file_hash>/c<k>.pdf` and is shared across twin documents. The engine's cache/model live in `vi-translate/.home` (USERPROFILE override). TOC/index/scan pages are left in English by design. Without `vi-translate/.venv` the tab falls back to Gemini text translation (`translate.service.ts`, `page_translations`).
-
-**Client audio.** `features/audio/playerStore.ts` holds one module-level `HTMLAudioElement`. The segment index drives the transcript highlight. `playAndWait()` powers the hands-free mode, and `append()` powers tutor auto-read, which splits streamed text into sentences and sends each to `/tts/speak`. `MiniPlayer` is mounted in `AppLayout`, so it survives route changes and owns the Space/←/→ shortcuts. Pages with their own Space handling (flashcards, hands-free) call `preventDefault`. `useTtsStatus()` hides every TTS control when the server is offline.
+Output goes to `uploads/translated/<file_hash>/c<k>.pdf`, shared across twin documents. The engine's cache, layout model and browser profile live in `vi-translate/.home` (USERPROFILE override, keeps drive C clean). TOC/index/scan pages stay in English by design. Without `vi-translate/.venv` the tab falls back to Gemini text translation (`translate.service.ts`, `page_translations`).
 
 **Roadmap UI.** `DocumentPage` shows `RoadmapView` (vertical spine, sections as stations, lessons on both sides) when there is no `?chapter=` param, and the lesson view (tabs Bài giảng / Tóm tắt / Sơ đồ / Câu hỏi + `QuickCheck`) when there is one. `QuickCheck` grades on the client: ≥ 70% calls `POST /chapters/:id/complete`. `LessonBody` turns `(tr. N)` into buttons that open the PDF.
 
@@ -73,9 +67,8 @@ Only the tutor (`services/ai/tutor.agent.ts`) is an agent. It uses function call
 
 - Flashcards are derived from summary `key_terms`, not a separate AI call.
 - Chapter boundary edits (`PATCH /documents/:id/chapters`) keep chapters whose page range is unchanged and re-process the rest.
-- Voice cloning (`POST /tts/voices/clone`) is not implemented.
-- The VieNeu API contract (`/health`, `/v1/voices`, `/v1/audio/speech`) is assumed from the plan, and `listVoices` accepts several response shapes. Verify against a real VieNeu server.
+- Text-to-speech (VieNeu) was built, then removed.
 
 ## Target machine
 
-Ryzen 7 5700U, no discrete GPU. VieNeu runs v3 Turbo **fp32** on CPU. Never int8, because Zen 2 has no VNNI and int8 audio comes out distorted. The fallback is v3 Nano behind a FastAPI wrapper that keeps `/v1/audio/speech`.
+Ryzen 7 5700U, no discrete GPU, Windows. Python tools run on CPU; keep heavy caches on drive D (drive C is tight).

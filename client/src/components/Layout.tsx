@@ -1,17 +1,14 @@
 import { Suspense, useEffect, useState } from "react";
 import { Link, NavLink, Outlet, useNavigate } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
-import { BarChart3, Headphones, House, Layers, LogOut, Menu, PanelLeftClose, PanelLeftOpen, Settings, X } from "lucide-react";
+import { BarChart3, House, Layers, LogOut, Menu, PanelLeftClose, PanelLeftOpen, Settings, X } from "lucide-react";
 import { useAuth } from "../stores/auth";
-import { usePlayer } from "../features/audio/playerStore";
-import { MiniPlayer } from "../features/audio/MiniPlayer";
 import { useThemeSync } from "../hooks/useTheme";
 import { cn, IconButton, Spinner } from "./ui";
 
 const NAV = [
   { to: "/app", label: "Tổng quan", icon: House, end: true },
   { to: "/app/flashcards", label: "Flashcard", icon: Layers },
-  { to: "/app/hands-free", label: "Ôn rảnh tay", icon: Headphones },
   { to: "/app/stats", label: "Thống kê", icon: BarChart3 },
   { to: "/app/settings", label: "Cài đặt", icon: Settings },
 ];
@@ -44,7 +41,6 @@ export function AppLayout() {
   const qc = useQueryClient();
   const navigate = useNavigate();
   const [open, setOpen] = useState(false);
-  const hasPlayer = usePlayer((s) => s.segments.length > 0);
   // Sidebar thu gọn (chỉ còn icon) — nhớ lựa chọn theo trình duyệt.
   const [collapsed, setCollapsed] = useState(() => {
     try {
@@ -62,7 +58,6 @@ export function AppLayout() {
   }, [collapsed]);
 
   const signOut = () => {
-    usePlayer.getState().stop();
     logout();
     qc.clear();
     navigate("/login");
@@ -143,12 +138,11 @@ export function AppLayout() {
         </div>
       )}
 
-      <main className={cn("min-w-0 flex-1", hasPlayer && "pb-28")}>
+      <main className="min-w-0 flex-1">
         <Suspense fallback={<div className="grid h-64 place-items-center"><Spinner /></div>}>
           <Outlet />
         </Suspense>
       </main>
-      <MiniPlayer />
     </div>
   );
 }

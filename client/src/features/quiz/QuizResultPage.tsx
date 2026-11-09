@@ -6,7 +6,6 @@ import { Page } from "../../components/Layout";
 import { Badge, Button, cn, Empty, Skeleton } from "../../components/ui";
 import { toast } from "../../stores/toast";
 import type { QuizSession } from "../../types";
-import { SpeakButton } from "../audio/SpeakButton";
 import { saveQuizSession } from "./QuizSetup";
 import { RotateCcw, Search } from "lucide-react";
 
@@ -95,7 +94,6 @@ export function QuizResultPage() {
                 {a.ai_feedback && <p className="mt-3 rounded-xl bg-slate-50 p-3 text-[14px] whitespace-pre-wrap dark:bg-white/5"><span className="font-medium">Nhận xét của AI: </span>{a.ai_feedback}</p>}
                 <div className="mt-3 flex items-start gap-2 text-sm text-slate-600 dark:text-slate-400">
                   <p className="flex-1">{q.explanation}</p>
-                  <SpeakButton text={`Đáp án đúng: ${q.correct_answer}. ${q.explanation}`} title={`Giải thích câu ${n}`} />
                 </div>
               </li>
             );

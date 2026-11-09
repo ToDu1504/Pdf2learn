@@ -65,17 +65,6 @@ export function useUpdateSettings() {
   });
 }
 
-export const useTtsStatus = () =>
-  useQuery({
-    queryKey: ["tts-status"],
-    queryFn: () => get<{ online: boolean; queue: number }>("/tts/status"),
-    refetchInterval: 30_000,
-    staleTime: 15_000,
-  });
-
-export const useVoices = (enabled: boolean) =>
-  useQuery({ queryKey: ["voices"], queryFn: () => get<{ id: string; name: string }[]>("/tts/voices"), enabled, staleTime: Infinity });
-
 export const useTutorSessions = (documentId: number) =>
   useQuery({ queryKey: ["tutor-sessions", documentId], queryFn: () => get<TutorSession[]>(`/tutor/sessions?documentId=${documentId}`) });
 
