@@ -1,7 +1,7 @@
 import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
-import { BarChart3, Check, ChevronLeft, ChevronRight, CircleAlert, Clock, Download, Ellipsis, FileText, Layers, ListChecks, Map, MessageCircle, Pencil, RotateCw, Search, Trash2 } from "lucide-react";
+import { BarChart3, Check, ChevronLeft, ChevronRight, CircleAlert, Clock, Download, Ellipsis, FileText, Languages, Layers, ListChecks, Map, MessageCircle, Pencil, RotateCw, Search, Trash2 } from "lucide-react";
 import { download, errorMessage, http } from "../api/client";
 import { useChapter, useDocument } from "../api/queries";
 import { Page } from "../components/Layout";
@@ -10,6 +10,7 @@ import { SummaryView, type SummaryFocus } from "../features/chapters/SummaryView
 import { QuestionsView } from "../features/chapters/QuestionsView";
 import { Mindmap } from "../features/chapters/Mindmap";
 import { ChapterEditor } from "../features/documents/ChapterEditor";
+import { FullTranslation } from "../features/documents/FullTranslation";
 import { QuizSetup } from "../features/quiz/QuizSetup";
 import { RoadmapView, StateIcon, groupLessons, lessonState } from "../features/roadmap/RoadmapView";
 import { LessonBody } from "../features/roadmap/LessonBody";
@@ -48,6 +49,7 @@ export function DocumentPage() {
   const setPdfPage = (from: number, to = from, quote?: string) => setPdfRange({ from, to: Math.min(Math.max(to, from), from + MAX_RANGE - 1), quote });
   const [editing, setEditing] = useState(false);
   const [quizOpen, setQuizOpen] = useState(false);
+  const [translateOpen, setTranslateOpen] = useState(false);
   const top = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -168,6 +170,9 @@ export function DocumentPage() {
               </button>
               <button className={menuItem} onClick={() => setEditing(true)} disabled={busy}>
                 <Pencil /> Sửa khoảng trang bài học
+              </button>
+              <button className={menuItem} onClick={() => setTranslateOpen(true)} disabled={doc.status !== "done"}>
+                <Languages /> Dịch toàn bộ PDF
               </button>
               <button className={menuItem} onClick={() => download(`/flashcards/export?documentId=${id}`, "flashcards.csv").catch((e) => toast.error(errorMessage(e)))}>
                 <Download /> Xuất flashcard (Anki CSV)
@@ -398,6 +403,7 @@ export function DocumentPage() {
       )}
 
       {editing && <ChapterEditor doc={doc} open onClose={() => setEditing(false)} />}
+      {translateOpen && <FullTranslation documentId={id} title={doc.title} open onClose={() => setTranslateOpen(false)} />}
       {quizOpen && <QuizSetup doc={doc} open onClose={() => setQuizOpen(false)} initialChapterId={lessonId ?? undefined} />}
     </Page>
   );

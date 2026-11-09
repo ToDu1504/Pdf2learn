@@ -1,6 +1,6 @@
 import { execFile, spawn } from "node:child_process";
 import { existsSync } from "node:fs";
-import { copyFile, mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
+import { copyFile, mkdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
@@ -26,6 +26,7 @@ const ROOT = path.resolve(env.VI_TRANSLATE_DIR);
 const PYTHON = path.join(ROOT, ".venv", process.platform === "win32" ? "Scripts/python.exe" : "bin/python");
 const CLI = path.join(ROOT, "scripts", "translate_pdf.py");
 const CHUNK_SCRIPT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../../scripts/pdf_chunk.py");
+const MERGE_SCRIPT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../../scripts/pdf_merge.py");
 const PY_HOOKS = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../../scripts/pyhooks");
 const OUT_DIR = path.resolve(env.UPLOAD_DIR, "translated");
 const TIMEOUT_MS = 20 * 60_000; // gồm cả thời gian chờ người dùng giải CAPTCHA (engine chờ tối đa 10 phút)
@@ -45,7 +46,11 @@ export type ChunkStatus = {
   error?: string;
 };
 
-type Job = { key: string; prefetch: boolean; run: () => Promise<void> };
+/**
+ * prefetch: dịch sẵn ở nền (chỉ Google qua trình duyệt, không dùng Gemini).
+ * full: thuộc lượt "dịch toàn bộ" của file `full` (cũng chỉ qua trình duyệt; lỗi thì dừng cả lượt).
+ */
+type Job = { key: string; prefetch: boolean; full?: string; run: () => Promise<void> };
 const state = new Map<string, ChunkStatus>(); // key = `${fileKey}:${chunk}`
 const queue: Job[] = [];
 let busy = false;
@@ -193,7 +198,7 @@ async function pump() {
   }
 }
 
-function enqueue(doc: Document, chunk: number, userId: number, prefetch: boolean): ChunkStatus {
+function enqueue(doc: Document, chunk: number, userId: number, prefetch: boolean, full = false): ChunkStatus {
   const { from, to } = bounds(doc, chunk);
   const key = `${fileKey(doc)}:${chunk}`;
   const st: ChunkStatus = { chunk, from, to, phase: "queued", done: 0, total: 0 };
@@ -201,6 +206,7 @@ function enqueue(doc: Document, chunk: number, userId: number, prefetch: boolean
   const job: Job = {
     key,
     prefetch,
+    full: full ? fileKey(doc) : undefined,
     run: async () => {
       try {
         await mkdir(path.dirname(chunkFile(doc, chunk)), { recursive: true });
@@ -208,6 +214,7 @@ function enqueue(doc: Document, chunk: number, userId: number, prefetch: boolean
         state.delete(key);
       } catch (err) {
         console.error(`[translate ${key}]`, (err as Error).message);
+        if (job.full && job.prefetch) stopFull(job.full, `Cụm trang ${st.from}–${st.to}: ${(err as Error).message}`);
         if (job.prefetch) state.delete(key); // dịch sẵn lỗi: bỏ qua, khi người dùng mở cụm này sẽ dịch lại
         else Object.assign(st, { phase: "error", error: (err as Error).message });
       }
@@ -256,4 +263,86 @@ export function requestChunk(doc: Document, page: number, userId: number, retry 
   const st = enqueue(doc, chunk, userId, false);
   prefetchNext(doc, chunk, userId);
   return st;
+}
+
+/* ---------------- dịch toàn bộ PDF ---------------- */
+
+/**
+ * Dịch lần lượt mọi cụm chưa có bản dịch, ở nền, chỉ bằng Google qua trình duyệt (không tốn lượt Gemini;
+ * Google đòi CAPTCHA thì cửa sổ Chrome bật lên). Một cụm lỗi → dừng cả lượt (tránh bị Google chặn nặng hơn),
+ * cụm đã dịch vẫn giữ: bấm "Dịch tiếp" sẽ làm phần còn lại. Cụm người dùng đang xem vẫn được ưu tiên.
+ */
+const fullRuns = new Map<string, { error: string | null; startedAt: number }>();
+
+function stopFull(key: string, error: string) {
+  const run = fullRuns.get(key);
+  if (run) run.error = error;
+  for (let i = queue.length - 1; i >= 0; i--) {
+    if (queue[i].full === key && queue[i].prefetch) {
+      state.delete(queue[i].key);
+      queue.splice(i, 1);
+    }
+  }
+}
+
+const chunkCount = (doc: Document) => chunkOf(doc.page_count ?? 1) + 1;
+
+export type FullStatus = {
+  total: number;
+  ready: number;
+  running: boolean;
+  /** Cụm đang dịch (nếu có) và tiến độ của nó. */
+  current: ChunkStatus | null;
+  error: string | null;
+  /** Có thể tải file ghép (mọi cụm đã dịch). */
+  complete: boolean;
+};
+
+export function fullStatus(doc: Document): FullStatus {
+  const key = fileKey(doc);
+  const total = chunkCount(doc);
+  let ready = 0;
+  for (let c = 0; c < total; c++) if (existsSync(chunkFile(doc, c))) ready++;
+  const pending = queue.some((j) => j.full === key) || [...state.entries()].some(([k, st]) => k.startsWith(`${key}:`) && st.phase !== "error");
+  const current = [...state.entries()].find(([k, st]) => k.startsWith(`${key}:`) && st.phase !== "queued" && st.phase !== "error")?.[1] ?? null;
+  const run = fullRuns.get(key);
+  return { total, ready, running: !!run && !run.error && pending, current, error: run?.error ?? null, complete: ready === total };
+}
+
+export function startFullTranslation(doc: Document, userId: number): FullStatus {
+  const key = fileKey(doc);
+  fullRuns.set(key, { error: null, startedAt: Date.now() });
+  for (let c = 0; c < chunkCount(doc); c++) {
+    if (existsSync(chunkFile(doc, c))) continue;
+    const k = `${key}:${c}`;
+    const cur = state.get(k);
+    if (cur && cur.phase !== "error") {
+      // Đang trong hàng đợi (vd. dịch sẵn): gắn vào lượt dịch toàn bộ.
+      const job = queue.find((j) => j.key === k);
+      if (job) job.full = key;
+      continue;
+    }
+    enqueue(doc, c, userId, true, true);
+  }
+  return fullStatus(doc);
+}
+
+export function cancelFullTranslation(doc: Document) {
+  stopFull(fileKey(doc), "Đã dừng theo yêu cầu.");
+  return fullStatus(doc);
+}
+
+/** Ghép mọi cụm đã dịch thành 1 file (cache lại tới khi có cụm mới hơn). */
+export async function fullTranslatedFile(doc: Document): Promise<string | null> {
+  const total = chunkCount(doc);
+  const parts = Array.from({ length: total }, (_, c) => chunkFile(doc, c));
+  if (parts.some((p) => !existsSync(p))) return null;
+  const out = path.join(OUT_DIR, fileKey(doc), "full-vi.pdf");
+  const newest = Math.max(...(await Promise.all(parts.map(async (p) => (await stat(p)).mtimeMs))));
+  if (!existsSync(out) || (await stat(out)).mtimeMs < newest) {
+    const tmp = `${out}.tmp.pdf`;
+    await py([MERGE_SCRIPT, tmp, ...parts]);
+    await rename(tmp, out);
+  }
+  return out;
 }

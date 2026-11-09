@@ -67,7 +67,9 @@ export async function postStream<E>(path: string, body: unknown, onEvent: (e: E)
 export async function download(path: string, fallbackName: string) {
   const res = await http.get(path, { responseType: "blob" });
   const cd = (res.headers["content-disposition"] as string | undefined) ?? "";
-  const name = /filename="?([^";]+)"?/.exec(cd)?.[1] ?? fallbackName;
+  // Ưu tiên filename* (UTF-8, giữ dấu tiếng Việt).
+  const utf8 = /filename\*=UTF-8''([^;]+)/i.exec(cd)?.[1];
+  const name = utf8 ? decodeURIComponent(utf8) : (/filename="?([^";]+)"?/.exec(cd)?.[1] ?? fallbackName);
   const url = URL.createObjectURL(res.data as Blob);
   const a = Object.assign(document.createElement("a"), { href: url, download: name });
   a.click();

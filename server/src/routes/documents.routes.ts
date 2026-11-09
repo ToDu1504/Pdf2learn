@@ -11,7 +11,16 @@ import { findOwnedDocument } from "../services/access.js";
 import { enqueueDocument, rebuildRoadmap } from "../jobs/processDocument.js";
 import { isAnalyzing } from "../services/chapterAnalysis.service.js";
 import { MAX_TRANSLATE_PAGES, translatePages } from "../services/translate.service.js";
-import { chunkFile, chunkOf, isPdfTranslatorInstalled, requestChunk } from "../services/translate/pdfTranslate.service.js";
+import {
+  cancelFullTranslation,
+  chunkFile,
+  chunkOf,
+  fullStatus,
+  fullTranslatedFile,
+  isPdfTranslatorInstalled,
+  requestChunk,
+  startFullTranslation,
+} from "../services/translate/pdfTranslate.service.js";
 import { progressBus, progressChannel, snapshot, type ProgressEvent } from "../jobs/progressBus.js";
 
 export const documentRoutes = Router();
@@ -184,6 +193,32 @@ documentRoutes.get("/:id/translation/pdf/:chunk", async (req, res) => {
   const file = chunkFile(doc, chunk);
   if (!existsSync(file)) throw new HttpError(404, "Cụm trang này chưa được dịch");
   res.type("application/pdf").sendFile(file);
+});
+
+/** Dịch toàn bộ PDF ở nền (theo cụm, qua Google trên trình duyệt). */
+documentRoutes.get("/:id/translation/full", async (req, res) => {
+  const doc = await findOwnedDocument(req.params.id, req.userId);
+  if (!isPdfTranslatorInstalled()) return res.json({ available: false });
+  res.json({ available: true, ...fullStatus(doc) });
+});
+
+documentRoutes.post("/:id/translation/full", async (req, res) => {
+  const doc = await findOwnedDocument(req.params.id, req.userId);
+  if (!isPdfTranslatorInstalled()) throw new HttpError(409, "Server chưa cài VI-Translate (xem README)");
+  res.status(202).json({ available: true, ...startFullTranslation(doc, req.userId) });
+});
+
+documentRoutes.delete("/:id/translation/full", async (req, res) => {
+  const doc = await findOwnedDocument(req.params.id, req.userId);
+  res.json({ available: true, ...cancelFullTranslation(doc) });
+});
+
+/** Tải bản dịch toàn bộ (ghép các cụm). */
+documentRoutes.get("/:id/translation/full/file", async (req, res) => {
+  const doc = await findOwnedDocument(req.params.id, req.userId);
+  const file = await fullTranslatedFile(doc);
+  if (!file) throw new HttpError(409, "Chưa dịch xong toàn bộ tài liệu");
+  res.download(file, `${doc.title.replace(/[\\/:*?"<>|]+/g, " ").trim() || "tai-lieu"} - tiếng Việt.pdf`);
 });
 
 /** Lập lại roadmap từ mục lục sách. Bài giữ nguyên khoảng trang thì giữ bài giảng và tiến độ. */
