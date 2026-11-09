@@ -1,0 +1,36 @@
+# Đóng gói app desktop: cd app && npm run dist  → dist/installer/Pdf2Learn-Setup-<phiên bản>.exe
+appId: app.pdf2learn.desktop
+productName: Pdf2Learn
+copyright: Pdf2Learn
+electronVersion: 37.2.0
+directories:
+  app: build          # tạo bởi scripts/stage.mjs (chỉ chứa thứ cần để chạy)
+  output: dist/installer
+  buildResources: desktop/assets
+# Không dùng asar: server chạy bằng Node của Electron (fork) và các script Python cần là file thật.
+asar: false
+npmRebuild: false
+afterPack: scripts/after-pack.cjs
+files:
+  - "**/*"
+  - "!server/**"
+# Server (kèm node_modules riêng) chép NGUYÊN VĂN vào resources/server: electron-builder bỏ node_modules lồng
+# bên trong khi đóng gói "files".
+extraResources:
+  - from: build/server
+    to: server
+win:
+  target:
+    - target: nsis
+      arch: [x64]
+  icon: desktop/assets/icon-256.png
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: Pdf2Learn
+  artifactName: Pdf2Learn-Setup-${version}.${ext}
+  include: desktop/installer.nsh
+  deleteAppDataOnUninstall: false

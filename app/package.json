@@ -8,9 +8,12 @@
   "scripts": {
     "build:client": "npm run build --prefix client",
     "start": "node desktop/run.cjs",
-    "dev": "npm run build:client && node desktop/run.cjs"
+    "dev": "npm run build:client && node desktop/run.cjs",
+    "stage": "node scripts/stage.mjs",
+    "dist": "node scripts/stage.mjs && electron-builder --win"
   },
   "devDependencies": {
-    "electron": "^37.2.0"
+    "electron": "^37.2.0",
+    "electron-builder": "^26.0.12"
   }
 }

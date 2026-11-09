@@ -61,7 +61,17 @@ let quitting = false;
 let trayHintShown = false;
 const PID_FILE = path.join(DATA_DIR, "server.pid");
 
-const log = (...a) => console.log("[desktop]", ...a);
+// Nhật ký của tiến trình chính (bản cài không có cửa sổ dòng lệnh): data/electron/desktop.log
+const DESKTOP_LOG = path.join(ELECTRON_DIR, "desktop.log");
+const log = (...a) => {
+  const line = `[${new Date().toISOString()}] ${a.map((x) => (x instanceof Error ? x.stack : String(x))).join(" ")}`;
+  console.log("[desktop]", ...a);
+  try {
+    fs.appendFileSync(DESKTOP_LOG, line + "\n");
+  } catch {
+    /* bỏ qua */
+  }
+};
 
 /* ---------------- tiến trình con ---------------- */
 
@@ -111,7 +121,8 @@ function freePort() {
 /** Chạy server bằng Node của Electron. Phát triển: chạy thẳng TypeScript qua tsx; bản cài: JS đã build. */
 async function startServer() {
   const port = await freePort();
-  const serverDir = path.join(APP_DIR, "server");
+  // Bản cài: server nằm ở resources/server (extraResources, kèm node_modules); khi phát triển: app/server.
+  const serverDir = DEV ? path.join(APP_DIR, "server") : path.join(process.resourcesPath, "server");
   const builtEntry = path.join(serverDir, "dist", "app.js");
   const useBuilt = !DEV && fs.existsSync(builtEntry);
   const entry = useBuilt ? builtEntry : path.join(serverDir, "src", "app.ts");
@@ -137,7 +148,10 @@ async function startServer() {
   const logFile = fs.createWriteStream(path.join(ELECTRON_DIR, "server.log"), { flags: "a" });
   server.stdout?.on("data", (b) => (logFile.write(b), DEV && process.stdout.write(b)));
   server.stderr?.on("data", (b) => (logFile.write(b), DEV && process.stderr.write(b)));
-  server.on("exit", (code) => {
+  log(`chạy server: ${process.execPath} ${[...execArgv, entry].join(" ")} (cwd ${serverDir})`);
+  server.on("error", (err) => log("server lỗi khi chạy:", err));
+  server.on("exit", (code, signal) => {
+    log(`server thoát: mã ${code}${signal ? `, tín hiệu ${signal}` : ""}`);
     fs.rmSync(PID_FILE, { force: true });
     if (!quitting) {
       dialog.showErrorBox("Pdf2Learn", `Máy chủ của app đã dừng (mã ${code}). Xem nhật ký: ${path.join(ELECTRON_DIR, "server.log")}`);
@@ -428,7 +442,10 @@ app.whenReady().then(async () => {
   try {
     await startServer();
   } catch (err) {
-    dialog.showErrorBox("Pdf2Learn", `Không khởi động được: ${err.message}`);
+    log("không khởi động được:", err);
+    dialog.showErrorBox("Pdf2Learn", `Không khởi động được: ${err.message}
+
+Nhật ký: ${DESKTOP_LOG}`);
     quitting = true;
     if (server?.pid) killTree(server.pid);
     app.exit(1);
