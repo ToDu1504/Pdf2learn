@@ -9,7 +9,7 @@ Cập nhật sau mỗi giai đoạn. Chi tiết từng giai đoạn ở mục 11
 | # | Giai đoạn | Trạng thái | Commit |
 |---|---|---|---|
 | 1 | SQLite cho server của app | ✅ Xong (10/11): 30 test, upload → lộ trình → bài học, thống kê, xóa dây chuyền đều chạy trên SQLite | `5825c4b` |
-| 2 | Chuyển dữ liệu từ MySQL sang SQLite | ⏳ Chưa làm (cần bật MySQL/Laragon 1 lần) | |
+| 2 | Chuyển dữ liệu từ MySQL sang SQLite | ✅ Xong (10/11): tài khoản tokhanhvu4@gmail.com — 1 tài liệu, 771 trang, 12 chặng, 58 bài + bài giảng, 287 câu hỏi, 210 flashcard, 62 lượt dùng AI; số dòng khớp từng bảng, khóa ngoại hợp lệ, PDF + bản dịch đã chép. Lệnh: `npx tsx scripts/migrate-from-mysql.ts --email <email> --replace` | (commit này) |
 | 3 | Bỏ đăng nhập, Express phục vụ giao diện | 🟡 Một nửa: server xong (người dùng cục bộ); giao diện còn trang đăng nhập | `5825c4b` |
 | 4 | Electron: cửa sổ, khay hệ thống, dọn tiến trình | ⏳ Chưa làm | |
 | 5 | Màn hình lần đầu chạy + Cài đặt (API key mã hóa) | ⏳ Chưa làm | |
@@ -19,6 +19,7 @@ Cập nhật sau mỗi giai đoạn. Chi tiết từng giai đoạn ở mục 11
 **Ghi chú phát sinh**
 
 - `app/server/.env` (không commit) tạm chứa Gemini key để chạy thử; bỏ khi có màn hình Cài đặt (giai đoạn 5).
+- Dữ liệu đã chuyển nằm ở `app/data/` (gitignored). Chạy lại script với `--replace` sẽ xóa dữ liệu app và chép lại từ MySQL.
 - Server của app chạy thử ở cổng 5100 (`cd app/server && npx tsx src/app.ts`) để không đụng bản web ở cổng 5000.
 
 ## 0. Quyết định đã chốt (10/11/2026)
