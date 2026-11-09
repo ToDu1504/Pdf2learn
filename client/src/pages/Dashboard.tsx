@@ -1,8 +1,12 @@
 import { Link, useNavigate } from "react-router-dom";
-import { ArrowRight, BookOpen, ChevronRight, FileText, Inbox, Layers, ListChecks } from "lucide-react";
+import { useQueryClient } from "@tanstack/react-query";
+import { ArrowRight, BookOpen, ChevronRight, FileText, Inbox, Layers, ListChecks, Trash2 } from "lucide-react";
 import { useDocuments, useOverview, useQuizHistory } from "../api/queries";
 import { Page } from "../components/Layout";
-import { Badge, Button, Empty, ProgressBar, Skeleton } from "../components/ui";
+import { Badge, Button, Empty, IconButton, ProgressBar, Skeleton } from "../components/ui";
+import { errorMessage, http } from "../api/client";
+import { toast } from "../stores/toast";
+import { ask } from "../stores/confirm";
 import { UploadZone } from "../features/documents/UploadZone";
 import { stepLabel } from "../hooks/useDocumentProgress";
 import { useAuth } from "../stores/auth";
@@ -68,6 +72,17 @@ function Today() {
 export function Dashboard() {
   const user = useAuth((s) => s.user);
   const docs = useDocuments();
+  const qc = useQueryClient();
+  const removeDoc = async (d: DocumentItem) => {
+    if (!(await ask({ title: `Xóa "${d.title}"?`, message: "Toàn bộ bài học, câu hỏi và flashcard của tài liệu này sẽ bị xóa. Không thể hoàn tác.", confirmLabel: "Xóa", danger: true }))) return;
+    try {
+      await http.delete(`/documents/${d.id}`);
+      await Promise.all([qc.invalidateQueries({ queryKey: ["documents"] }), qc.invalidateQueries({ queryKey: ["stats", "overview"] })]);
+      toast.info("Đã xóa tài liệu");
+    } catch (err) {
+      toast.error(errorMessage(err));
+    }
+  };
   const overview = useOverview();
   const history = useQuizHistory();
 
@@ -115,7 +130,7 @@ export function Dashboard() {
             <ul className="card divide-y divide-black/[0.06] overflow-hidden dark:divide-white/[0.08]">
               {docs.data.map((d) => (
                 <li key={d.id}>
-                  <Link to={`/app/documents/${d.id}`} className="flex items-center gap-4 px-5 py-4 transition-colors hover:bg-slate-50 dark:hover:bg-white/5">
+                  <Link to={`/app/documents/${d.id}`} className="group flex items-center gap-4 px-5 py-4 transition-colors hover:bg-slate-50 dark:hover:bg-white/5">
                     <div className="grid size-10 shrink-0 place-items-center rounded-xl bg-slate-100 text-slate-500 dark:bg-white/10">
                       <FileText className="size-5" strokeWidth={1.5} />
                     </div>
@@ -135,6 +150,16 @@ export function Dashboard() {
                       )}
                     </div>
                     {d.status !== "done" && <Badge color={STATUS[d.status].color}>{STATUS[d.status].label}</Badge>}
+                    <IconButton
+                      label="Xóa tài liệu"
+                      className="hover:text-rose-500 md:opacity-0 md:group-hover:opacity-100 md:focus-visible:opacity-100"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        void removeDoc(d);
+                      }}
+                    >
+                      <Trash2 />
+                    </IconButton>
                     <ChevronRight className="size-4 text-slate-300" />
                   </Link>
                 </li>

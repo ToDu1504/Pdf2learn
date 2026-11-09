@@ -1,6 +1,7 @@
-import { forwardRef, type ButtonHTMLAttributes, type ReactNode } from "react";
-import { X } from "lucide-react";
+import { forwardRef, useEffect, useRef, useState, type ButtonHTMLAttributes, type ReactNode } from "react";
+import { Pencil, X } from "lucide-react";
 import { useToast } from "../stores/toast";
+import { useConfirm } from "../stores/confirm";
 
 export const cn = (...c: (string | false | null | undefined)[]) => c.filter(Boolean).join(" ");
 
@@ -115,6 +116,36 @@ export function Modal({ open, onClose, title, children, wide }: { open: boolean;
   );
 }
 
+/** Hộp thoại xác nhận toàn cục (gọi bằng `ask()` trong stores/confirm). Esc / bấm nền = hủy. */
+export function ConfirmDialog() {
+  const { current, close } = useConfirm();
+  useEffect(() => {
+    if (!current) return;
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && close(false);
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [current, close]);
+  if (!current) return null;
+  return (
+    <div className="fixed inset-0 z-[55] flex items-end justify-center bg-black/30 p-4 backdrop-blur-sm sm:items-center" onMouseDown={() => close(false)}>
+      <div role="alertdialog" aria-modal aria-labelledby="confirm-title" className="w-full max-w-sm rounded-3xl bg-white p-6 shadow-2xl dark:bg-slate-900" onMouseDown={(e) => e.stopPropagation()}>
+        <h2 id="confirm-title" className="text-[19px] font-semibold">
+          {current.title}
+        </h2>
+        {current.message && <p className="mt-2 text-[15px] text-slate-500">{current.message}</p>}
+        <div className="mt-6 flex justify-end gap-2">
+          <Button variant="secondary" onClick={() => close(false)}>
+            {current.cancelLabel ?? "Hủy"}
+          </Button>
+          <Button autoFocus variant={current.danger ? "danger" : "primary"} onClick={() => close(true)}>
+            {current.confirmLabel ?? "Đồng ý"}
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /** Thông báo dạng viên thuốc tối màu ở giữa phía dưới (kiểu iOS). */
 export function Toaster() {
   const { toasts, dismiss } = useToast();
@@ -159,3 +190,70 @@ export function Tabs<T extends string>({ value, onChange, items }: { value: T; o
 
 export const DIFFICULTY_LABEL = { easy: "Dễ", medium: "Trung bình", hard: "Khó" } as const;
 export const TYPE_LABEL = { mcq: "Trắc nghiệm", true_false: "Đúng/Sai", short_answer: "Tự luận" } as const;
+
+/**
+ * Tiêu đề sửa tại chỗ: rê chuột hiện nút bút chì; Enter / bấm ra ngoài để lưu, Esc để hủy.
+ * `onSave` ném lỗi thì giữ ô nhập để người dùng sửa tiếp.
+ */
+export function EditableTitle({ value, onSave, className, label = "Sửa tiêu đề" }: { value: string; onSave: (v: string) => Promise<unknown>; className?: string; label?: string }) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(value);
+  const [saving, setSaving] = useState(false);
+  const input = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    if (editing) input.current?.select();
+  }, [editing]);
+
+  const start = () => {
+    setDraft(value);
+    setEditing(true);
+  };
+  const commit = async () => {
+    const v = draft.trim();
+    if (!v || v === value) return setEditing(false);
+    setSaving(true);
+    try {
+      await onSave(v);
+      setEditing(false);
+    } catch {
+      input.current?.focus();
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (editing)
+    return (
+      <input
+        ref={input}
+        value={draft}
+        maxLength={250}
+        disabled={saving}
+        aria-label={label}
+        onChange={(e) => setDraft(e.target.value)}
+        onBlur={() => void commit()}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") void commit();
+          if (e.key === "Escape") setEditing(false);
+        }}
+        className={cn("w-full min-w-0 rounded-lg bg-transparent px-1 -mx-1 outline-none ring-2 ring-brand-500/40 disabled:opacity-60", className)}
+      />
+    );
+  return (
+    <span className={cn("group/title inline-flex min-w-0 items-baseline gap-1.5", className)}>
+      <span className="min-w-0 break-words">{value}</span>
+      <button
+        type="button"
+        aria-label={label}
+        title={label}
+        onClick={(e) => {
+          e.stopPropagation();
+          start();
+        }}
+        className="shrink-0 self-center rounded-full p-1 text-slate-400 transition-opacity md:opacity-0 hover:bg-slate-100 hover:text-slate-700 md:focus-visible:opacity-100 md:group-hover/title:opacity-100 dark:hover:bg-white/10 dark:hover:text-white [&_svg]:size-[0.6em] [&_svg]:min-h-3.5 [&_svg]:min-w-3.5"
+      >
+        <Pencil />
+      </button>
+    </span>
+  );
+}

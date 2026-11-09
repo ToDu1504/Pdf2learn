@@ -4,7 +4,7 @@ import { Op } from "sequelize";
 import { Chapter, Document, DocumentPage, RoadmapSection } from "../models/index.js";
 import { pdfPath } from "../middlewares/upload.js";
 import { buildRanges, extractPageTexts, fixedRanges, pickStudyChapters, readPdfMeta, type ChapterRange } from "../services/pdf.service.js";
-import { childBookmarks, headingCandidates, planRoadmap, saveRoadmap } from "../services/roadmap.service.js";
+import { annotateRoadmap, findNode, headingCandidates, REVIEW_TOPIC, roadmapReport, saveRoadmap, structureBook, subtopicsOf, type RoadmapReport } from "../services/roadmap.service.js";
 import { detectChaptersWithAi } from "../services/ai/content.service.js";
 import { headText } from "../services/ai/source.js";
 import { analyzeFrom } from "../services/chapterAnalysis.service.js";
@@ -68,32 +68,7 @@ export async function processDocument(docId: number) {
       chapters = await Chapter.findAll({ where: { document_id: doc.id }, order: [["order_index", "ASC"]] });
     }
     if (!chapters.length) {
-      await setProgress(doc, { current_step: "split" });
-      let ranges = pickStudyChapters(buildRanges(meta.outline, meta.pageCount));
-      if (ranges.length < 2) {
-        const starts = await detectChaptersWithAi({
-          filePath: file,
-          pageCount: meta.pageCount,
-          userId: doc.user_id,
-          headText: await headText(doc.id, meta.pageCount),
-        }).catch((err) => {
-          console.warn("[split] AI không đọc được mục lục:", (err as Error).message);
-          return [];
-        });
-        ranges = pickStudyChapters(buildRanges(starts, meta.pageCount));
-      }
-      if (ranges.length < 2) ranges = fixedRanges(meta.pageCount);
-
-      // Lập roadmap: chặng = chương sách, bài học = mục con (1 lượt AI; lỗi thì dựng từ bookmark).
-      await setProgress(doc, { current_step: "roadmap", progress: 85 });
-      const pages = await DocumentPage.findAll({ where: { document_id: doc.id }, attributes: ["page", "text"], order: [["page", "ASC"]] });
-      const childrenOf = (r: ChapterRange) => {
-        const fromBookmarks = childBookmarks(meta.tree, r);
-        return fromBookmarks.length >= 2 ? fromBookmarks : headingCandidates(pages.filter((p) => p.page >= r.start_page && p.page <= r.end_page));
-      };
-      const { plan, ai } = await planRoadmap({ doc, ranges, childrenOf });
-      await saveRoadmap(doc.id, plan);
-      console.log(`[roadmap] doc ${doc.id}: ${plan.length} chặng, ${plan.reduce((n, s) => n + s.topics.length, 0)} bài học (${ai ? "AI" : "từ bookmark"})`);
+      await buildRoadmap(doc, meta);
       chapters = await Chapter.findAll({ where: { document_id: doc.id }, order: [["order_index", "ASC"]] });
     }
 
@@ -109,30 +84,91 @@ export async function processDocument(docId: number) {
   }
 }
 
+type PdfMeta = Awaited<ReturnType<typeof readPdfMeta>>;
+
+/**
+ * Lập roadmap bám sát sách: chương (bookmark → mục lục AI đọc → chia đều) → cấu trúc bài học từ mục con
+ * (tất định) → 1 lượt AI đặt tên tiếng Việt/mô tả → lưu kèm báo cáo đối chiếu. Bài cũ cùng khoảng trang được giữ.
+ */
+async function buildRoadmap(doc: Document, meta: PdfMeta) {
+  await setProgress(doc, { current_step: "split" });
+  const file = pdfPath(doc.file_path);
+  let source: RoadmapReport["source"] = "bookmark";
+  let ranges = pickStudyChapters(buildRanges(meta.outline, meta.pageCount));
+  if (ranges.length < 2) {
+    source = "toc";
+    const starts = await detectChaptersWithAi({
+      filePath: file,
+      pageCount: meta.pageCount,
+      userId: doc.user_id,
+      headText: await headText(doc.id, meta.pageCount),
+    }).catch((err) => {
+      console.warn("[split] AI không đọc được mục lục:", (err as Error).message);
+      return [];
+    });
+    ranges = pickStudyChapters(buildRanges(starts, meta.pageCount));
+  }
+  if (ranges.length < 2) {
+    source = "fixed";
+    ranges = fixedRanges(meta.pageCount);
+  }
+
+  await setProgress(doc, { current_step: "roadmap", progress: 85 });
+  const pages = await DocumentPage.findAll({ where: { document_id: doc.id }, attributes: ["page", "text"], order: [["page", "ASC"]] });
+  // Mục con của chương: bookmark; chương không có bookmark con → tiêu đề dò từ text trang.
+  const itemsOf = (r: ChapterRange) => {
+    const kids = findNode(meta.tree, r)?.children ?? [];
+    if (kids.some((k) => !REVIEW_TOPIC.test(k.title.trim()))) return kids;
+    const heads = headingCandidates(pages.filter((p) => p.page >= r.start_page && p.page <= r.end_page));
+    return [...kids, ...heads.map((h) => ({ ...h, children: [] }))];
+  };
+  const { plan, ai } = await annotateRoadmap(doc, structureBook(ranges, itemsOf));
+  for (const s of plan) for (const l of s.lessons) l.subtopics = subtopicsOf(meta.tree, l);
+  const report = roadmapReport(plan, meta.pageCount, meta.tree, source, ai);
+  const { lessons, kept } = await saveRoadmap(doc, plan, report);
+  console.log(
+    `[roadmap] doc ${doc.id}: ${plan.length} chặng, ${lessons} bài (${source}${ai ? " + AI đặt tên" : ""}), ` +
+      `phủ ${report.covered}/${meta.pageCount} trang${kept ? `, giữ ${kept} bài cũ` : ""}`,
+  );
+}
+
 /** Cache theo file: chép roadmap (chặng + bài học) từ tài liệu trùng file. */
 async function copyRoadmap(fromDocId: number, toDocId: number) {
   const sections = await RoadmapSection.findAll({ where: { document_id: fromDocId }, order: [["order_index", "ASC"]] });
   if (!sections.length) return false;
   const chapters = await Chapter.findAll({ where: { document_id: fromDocId }, order: [["order_index", "ASC"]] });
   for (const s of sections) {
-    const copy = await RoadmapSection.create({ document_id: toDocId, order_index: s.order_index, title: s.title, description: s.description });
+    const copy = await RoadmapSection.create({ document_id: toDocId, order_index: s.order_index, title: s.title, source_title: s.source_title, description: s.description });
     await Chapter.bulkCreate(
       chapters
         .filter((c) => c.section_id === s.id)
-        .map(({ order_index, title, description, start_page, end_page, importance, est_minutes }) => ({
-          document_id: toDocId, section_id: copy.id, order_index, title, description, start_page, end_page, importance, est_minutes,
+        .map(({ order_index, title, source_title, description, start_page, end_page, importance, est_minutes }) => ({
+          document_id: toDocId, section_id: copy.id, order_index, title, source_title, description, start_page, end_page, importance, est_minutes,
         })),
     );
   }
+  const from = await Document.findByPk(fromDocId, { attributes: ["roadmap_report"] });
+  if (from?.roadmap_report) await Document.update({ roadmap_report: from.roadmap_report }, { where: { id: toDocId } });
   return true;
 }
 
-/** Xóa roadmap cũ (kèm bài học) và lập lại. Dùng cho tài liệu tạo trước khi có roadmap. */
+/**
+ * Lập lại roadmap từ mục lục của sách. Bài nào giữ nguyên khoảng trang thì giữ bài giảng, câu hỏi,
+ * flashcard và tiến độ; chỉ bài đổi ranh giới mới bị thay.
+ */
 export async function rebuildRoadmap(doc: Document) {
-  await Chapter.destroy({ where: { document_id: doc.id } });
-  await RoadmapSection.destroy({ where: { document_id: doc.id } });
-  await doc.update({ status: "queued", progress: 0, error_message: null });
-  enqueueDocument(doc.id);
+  await setProgress(doc, { status: "queued", current_step: "roadmap", progress: 80, error_message: null });
+  jobRunner.add(`doc:${doc.id}`, async () => {
+    try {
+      await setProgress(doc, { status: "processing", current_step: "metadata", progress: 80, error_message: null });
+      await buildRoadmap(doc, await readPdfMeta(pdfPath(doc.file_path)));
+      await setProgress(doc, { status: "done", current_step: "done", progress: 100 });
+    } catch (err) {
+      console.error(`[roadmap ${doc.id}]`, err);
+      // Roadmap cũ vẫn còn nguyên (saveRoadmap chạy trong transaction) → tài liệu vẫn dùng được.
+      await setProgress(doc, { status: "done", current_step: "done", progress: 100, error_message: `Không lập lại được lộ trình: ${(err as Error).message}`.slice(0, 1000) });
+    }
+  });
 }
 
 /** Gọi khi server khởi động: xử lý tiếp các tài liệu dang dở. */

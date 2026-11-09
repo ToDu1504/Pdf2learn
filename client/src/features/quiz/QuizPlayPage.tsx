@@ -5,6 +5,7 @@ import { errorMessage, http } from "../../api/client";
 import { Page } from "../../components/Layout";
 import { Badge, Button, cn, DIFFICULTY_LABEL, Empty, ProgressBar, TYPE_LABEL } from "../../components/ui";
 import { toast } from "../../stores/toast";
+import { ask, useConfirm } from "../../stores/confirm";
 import type { QuizResult, QuizSession } from "../../types";
 import { ChevronLeft, ChevronRight, Clock, ListChecks } from "lucide-react";
 
@@ -41,8 +42,9 @@ export function QuizPlayPage() {
   const submit = useCallback(
     async (auto = false) => {
       if (!session || submitting) return;
+      if (auto) useConfirm.getState().close(false); // hết giờ khi đang hỏi xác nhận → đóng hộp thoại
       const unanswered = session.questions.filter((q) => !answers[q.id]?.trim()).length;
-      if (!auto && unanswered && !confirm(`Còn ${unanswered} câu chưa trả lời. Nộp bài?`)) return;
+      if (!auto && unanswered && !(await ask({ title: "Nộp bài?", message: `Còn ${unanswered} câu chưa trả lời.`, confirmLabel: "Nộp bài", cancelLabel: "Làm tiếp" }))) return;
       setSubmitting(true);
       try {
         const { data } = await http.post<QuizResult>(`/quizzes/${id}/submit`, {

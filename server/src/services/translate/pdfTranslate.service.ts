@@ -26,6 +26,7 @@ const ROOT = path.resolve(env.VI_TRANSLATE_DIR);
 const PYTHON = path.join(ROOT, ".venv", process.platform === "win32" ? "Scripts/python.exe" : "bin/python");
 const CLI = path.join(ROOT, "scripts", "translate_pdf.py");
 const CHUNK_SCRIPT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../../scripts/pdf_chunk.py");
+const PY_HOOKS = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../../scripts/pyhooks");
 const OUT_DIR = path.resolve(env.UPLOAD_DIR, "translated");
 const TIMEOUT_MS = 20 * 60_000; // gồm cả thời gian chờ người dùng giải CAPTCHA (engine chờ tối đa 10 phút)
 const run = promisify(execFile);
@@ -61,7 +62,17 @@ function bounds(doc: Document, chunk: number) {
 /** Engine ghi cache, model, hồ sơ trình duyệt vào thư mục home: trỏ sang vi-translate/.home để không chiếm ổ C. */
 function pyEnv() {
   const home = path.join(ROOT, ".home");
-  return { ...process.env, USERPROFILE: home, HOME: home, PYTHONIOENCODING: "utf-8", PYTHONUTF8: "1" };
+  return {
+    ...process.env,
+    USERPROFILE: home,
+    HOME: home,
+    PYTHONIOENCODING: "utf-8",
+    PYTHONUTF8: "1",
+    // sitecustomize.py: mở Google Chrome thay vì trình duyệt mặc định (Edge) khi dịch qua trình duyệt.
+    PYTHONPATH: PY_HOOKS,
+    VI_TRANSLATE_ROOT: ROOT,
+    PDF2LEARN_BROWSER: env.TRANSLATE_BROWSER,
+  };
 }
 
 const errorLine = (out: string) => out.split(/\r?\n/).find((l) => l.startsWith("error:"));

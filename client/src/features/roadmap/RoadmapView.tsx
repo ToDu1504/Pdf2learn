@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
-import { ArrowRight, Check, CircleAlert, Clock } from "lucide-react";
-import { Button, cn, ProgressBar, Spinner } from "../../components/ui";
-import type { ChapterItem, DocumentDetail } from "../../types";
+import { ArrowRight, BookCheck, Check, ChevronDown, CircleAlert, Clock } from "lucide-react";
+import { Button, cn, EditableTitle, ProgressBar, Spinner } from "../../components/ui";
+import type { ChapterItem, DocumentDetail, RoadmapReport } from "../../types";
 
 export type LessonState = "completed" | "ready" | "analyzing" | "failed" | "new";
 
@@ -46,7 +46,7 @@ function LessonCard({ lesson, onOpen }: { lesson: ChapterItem; onOpen: (id: numb
   return (
     <button
       onClick={() => onOpen(lesson.id)}
-      title={lesson.description ?? undefined}
+      title={[lesson.source_title && `Theo sách: ${lesson.source_title}`, lesson.description].filter(Boolean).join("\n") || undefined}
       className={cn(
         "group flex w-full min-w-0 items-center gap-3 rounded-xl border bg-white px-4 py-3 text-left transition hover:border-black/15 hover:shadow-[0_2px_8px_rgba(0,0,0,0.06)] dark:bg-slate-900 dark:hover:border-white/20",
         optional ? "border-dashed border-black/15 dark:border-white/15" : "border-black/[0.06] dark:border-white/[0.08]",
@@ -56,7 +56,10 @@ function LessonCard({ lesson, onOpen }: { lesson: ChapterItem; onOpen: (id: numb
       <span className="min-w-0 flex-1">
         <span className={cn("block text-[15px] leading-snug font-medium", state === "completed" && "text-slate-500")}>{lesson.title}</span>
         <span className="mt-0.5 flex items-center gap-2 text-[12px] text-slate-500">
-          {lesson.est_minutes ? <span>{lesson.est_minutes} phút</span> : null}
+          <span className="tabular-nums">
+            tr. {lesson.start_page}–{lesson.end_page}
+          </span>
+          {lesson.est_minutes ? <span>· {lesson.est_minutes} phút</span> : null}
           {optional && <span>· Tùy chọn</span>}
         </span>
       </span>
@@ -65,11 +68,53 @@ function LessonCard({ lesson, onOpen }: { lesson: ChapterItem; onOpen: (id: numb
   );
 }
 
+const SOURCE_LABEL: Record<RoadmapReport["source"], string> = {
+  bookmark: "mục lục (bookmark) của PDF",
+  toc: "trang mục lục do AI đọc",
+  fixed: "chia đều theo trang (PDF không có mục lục)",
+};
+
+/** Đối chiếu với sách: lộ trình phủ bao nhiêu trang, đoạn nào bị bỏ qua và vì sao (tên mục trong sách). */
+function BookCheckPanel({ report }: { report: RoadmapReport }) {
+  const pct = Math.round((report.covered / Math.max(1, report.page_count)) * 100);
+  return (
+    <details className="card group mb-14 overflow-hidden">
+      <summary className="flex cursor-pointer list-none items-center gap-3 px-5 py-4 [&::-webkit-details-marker]:hidden">
+        <BookCheck className="size-5 shrink-0 text-brand-600" strokeWidth={1.75} />
+        <span className="min-w-0 flex-1">
+          <span className="block text-[15px] font-medium">Đối chiếu với sách</span>
+          <span className="block text-[13px] text-slate-500">
+            Bài học phủ {report.covered}/{report.page_count} trang ({pct}%) · dựng từ {SOURCE_LABEL[report.source]}
+            {report.skipped.length ? ` · ${report.skipped.length} đoạn không thành bài học` : ""}
+          </span>
+        </span>
+        <ChevronDown className="size-4 shrink-0 text-slate-400 transition group-open:rotate-180" />
+      </summary>
+      <div className="border-t border-black/[0.06] px-5 py-4 text-[14px] dark:border-white/[0.08]">
+        <p className="mb-3 text-slate-500">
+          Mỗi chặng là một chương, mỗi bài là một mục trong mục lục của sách; AI chỉ dịch tên và viết mô tả, không đổi khoảng trang.
+          Các đoạn dưới đây không thành bài học (bìa, mục lục, phần ôn tập cuối chương, phụ lục…):
+        </p>
+        <ul className="space-y-1.5">
+          {report.skipped.map((s) => (
+            <li key={s.from} className="flex gap-3">
+              <span className="w-24 shrink-0 text-slate-400 tabular-nums">
+                tr. {s.from === s.to ? s.from : `${s.from}–${s.to}`}
+              </span>
+              <span className="min-w-0 text-slate-600 dark:text-slate-300">{s.titles.join(" · ") || "—"}</span>
+            </li>
+          ))}
+        </ul>
+      </div>
+    </details>
+  );
+}
+
 /**
  * Lộ trình dạng trục dọc mảnh: mỗi chặng là một mốc đánh số trên trục, bài học xếp hai bên
  * (màn rộng) hoặc một cột (điện thoại). Bấm bài học để mở bài giảng.
  */
-export function RoadmapView({ doc, onOpen }: { doc: DocumentDetail; onOpen: (lessonId: number) => void }) {
+export function RoadmapView({ doc, onOpen, onRenameSection }: { doc: DocumentDetail; onOpen: (lessonId: number) => void; onRenameSection?: (sectionId: number, title: string) => Promise<unknown> }) {
   const [hideOptional, setHideOptional] = useState(false);
   const groups = useMemo(() => groupLessons(doc), [doc]);
   const total = doc.chapters.length;
@@ -118,6 +163,8 @@ export function RoadmapView({ doc, onOpen }: { doc: DocumentDetail; onOpen: (les
         </div>
       </div>
 
+      {doc.roadmap_report && <BookCheckPanel report={doc.roadmap_report} />}
+
       <div className="relative">
         {/* trục dọc */}
         <div className="absolute top-2 bottom-2 left-[15px] w-px bg-slate-300 md:left-1/2 dark:bg-white/15" />
@@ -141,7 +188,14 @@ export function RoadmapView({ doc, onOpen }: { doc: DocumentDetail; onOpen: (les
                     {sectionDone ? <Check className="size-4" strokeWidth={3} /> : si + 1}
                   </span>
                   <div className="relative z-10 max-w-lg pt-0.5 md:bg-slate-50 md:px-4 md:pt-0 md:dark:bg-slate-950">
-                    <p className="text-[22px] leading-tight font-semibold">{section.title}</p>
+                    <p className="text-[22px] leading-tight font-semibold">
+                      {section.id && onRenameSection ? (
+                        <EditableTitle value={section.title} label="Đổi tên chặng" onSave={(t) => onRenameSection(section.id, t)} />
+                      ) : (
+                        section.title
+                      )}
+                    </p>
+                    {section.source_title && section.source_title !== section.title && <p className="mt-0.5 text-[12px] text-slate-400">{section.source_title}</p>}
                     {section.description && <p className="mt-1 text-[15px] text-slate-500">{section.description}</p>}
                     <p className="mt-1 text-[12px] text-slate-400">
                       {finished}/{lessons.length} bài

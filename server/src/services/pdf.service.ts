@@ -129,19 +129,23 @@ export function buildRanges(starts: { title: string; page: number }[], pageCount
 
 export type OutlineNode = { title: string; page: number; children: OutlineNode[] };
 
-/** Mục dài hơn ngưỡng này mà có bookmark con thì tách thành các chương con (vd. "Part I" → các "Chapter"). */
-export const MAX_CHAPTER_PAGES = 60;
+/** Mục cấp trên dài hơn ngưỡng này mà có mục con thì luôn tách (an toàn cho sách không ghi "Part"/"Chapter"). */
+export const MAX_CHAPTER_PAGES = 150;
+const PART = /^(part|phần|unit|module|học phần)\s+[\divxlc]+\b/i;
+const CHAPTER = /^(chapter|chương|lesson)\s+\d+/i;
 
 /**
- * Chọn cấp bookmark phù hợp: giữ cấp 1, nhưng mục nào dài > MAX_CHAPTER_PAGES và có con
- * thì thay bằng các con của nó (đệ quy, để Part → Chapter). Trả về danh sách trang bắt đầu.
+ * Chọn cấp bookmark làm "chương" (= 1 chặng của roadmap). Mục cấp trên được thay bằng các mục con khi nó là
+ * "Part" chứa các "Chapter" (vd. CCNA: Part I → Chapter 1, 2, 3), hoặc dài quá MAX_CHAPTER_PAGES.
+ * Chương dài (vd. 70 trang) vẫn giữ nguyên là 1 chặng; mục con của nó thành các bài học.
  */
 export function flattenOutline(nodes: OutlineNode[], pageCount: number, endPage = pageCount): { title: string; page: number }[] {
   const sorted = [...nodes].sort((a, b) => a.page - b.page);
   return sorted.flatMap((n, i) => {
     const end = i + 1 < sorted.length ? sorted[i + 1].page - 1 : endPage;
     const kids = n.children.filter((c) => c.page >= n.page && c.page <= end);
-    if (end - n.page + 1 > MAX_CHAPTER_PAGES && kids.length >= 2) {
+    const container = PART.test(n.title.trim()) || kids.filter((c) => CHAPTER.test(c.title.trim())).length >= 2;
+    if (kids.length >= 2 && (container || end - n.page + 1 > MAX_CHAPTER_PAGES)) {
       const sub = flattenOutline(kids, pageCount, end);
       // Phần mở đầu của Part (trước chương con đầu tiên) nếu đủ dài thì giữ thành 1 mục riêng.
       return sub[0].page - n.page >= 3 ? [{ title: n.title, page: n.page }, ...sub] : sub;
@@ -154,11 +158,14 @@ export function flattenOutline(nodes: OutlineNode[], pageCount: number, endPage 
 const NON_CONTENT =
   /^(front ?cover|back ?cover|cover|title page|half title|copyright|credits|dedication|about the (author|authors|contributing authors?|technical (reviewers?|editors?))|acknowledg|contents( at a glance)?|table of contents|brief contents|index|glossary|bibliography|references|where are the companion|online appendix|appendix|appendixes|appendices|answers to|review|(mục lục|bìa|lời (nói đầu|cảm ơn|giới thiệu)|tài liệu tham khảo|phụ lục|chỉ mục))\b/i;
 
+// Phần giới thiệu sách / kế hoạch ôn thi (khớp nguyên tên, để không bỏ nhầm chương "Introduction to ...").
+const FRONT_MATTER = /^(introduction|preface|foreword|your study plan|how to use this book|about this book|lời nói đầu|giới thiệu)$/i;
+
 /** Bỏ mục không phải nội dung (bìa, bản quyền, mục lục, index, phụ lục...) và mục quá ngắn. */
 export function pickStudyChapters(ranges: ChapterRange[], minPages = 3): ChapterRange[] {
   const picked = ranges.filter((r) => {
     const title = r.title.replace(/^(part|phần)\s+[\divxlc]+\s*[:.\-–]\s*/i, "");
-    return !NON_CONTENT.test(title) && !NON_CONTENT.test(r.title) && r.end_page - r.start_page + 1 >= minPages;
+    return !NON_CONTENT.test(title) && !NON_CONTENT.test(r.title) && !FRONT_MATTER.test(r.title.replace(/\s+/g, " ").trim()) && r.end_page - r.start_page + 1 >= minPages;
   });
   return picked.length >= 2 ? picked : ranges;
 }

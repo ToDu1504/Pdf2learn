@@ -2,7 +2,7 @@ import { lazy, Suspense } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 import { AppLayout } from "./components/Layout";
-import { Spinner, Toaster } from "./components/ui";
+import { Spinner, ConfirmDialog, Toaster } from "./components/ui";
 import { LoginPage, RegisterPage, RequireAuth } from "./features/auth/AuthPages";
 import { Landing } from "./pages/Landing";
 import { Dashboard } from "./pages/Dashboard";
@@ -54,6 +54,7 @@ export default function App() {
         </Suspense>
       </BrowserRouter>
       <Toaster />
+      <ConfirmDialog />
     </QueryClientProvider>
   );
 }

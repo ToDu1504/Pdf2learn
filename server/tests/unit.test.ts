@@ -1,10 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { PDFDocument } from "pdf-lib";
 import { writeFile } from "node:fs/promises";
+import { existsSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { sm2 } from "../src/services/srs.service.js";
-import { buildRanges, cutChapterPdf, fixedRanges, readPdfMeta, toDocumentPage } from "../src/services/pdf.service.js";
+import { buildRanges, cutChapterPdf, fixedRanges, readPdfMeta, toDocumentPage, type OutlineNode } from "../src/services/pdf.service.js";
 import { AnalysisZod, QuizZod, MindmapZod } from "../src/services/ai/schemas.js";
 import { isDailyQuotaError, withRetry } from "../src/utils/withRetry.js";
 
@@ -154,37 +155,91 @@ describe("chapter splitting", () => {
   });
 });
 
+// Mục lục thật của sách có bản quyền: chỉ có ở máy dev (gitignored), thiếu thì bỏ qua test tương ứng.
+const hasBook = (name: string) => existsSync(path.join(__dirname, "fixtures", `outline-${name}.json`));
+const books = hasBook("comptia-tech") && hasBook("ccna");
+
 describe("roadmap", () => {
-  it("lấy mục con từ bookmark, bỏ mục ôn tập, bỏ qua nhóm 'Foundation Topics'", async () => {
-    const { childBookmarks } = await import("../src/services/roadmap.service.js");
-    const tree = [
-      { title: "Chapter 1", page: 10, children: [
-        { title: "Do I Know This Already?", page: 10, children: [] },
-        { title: "Foundation Topics", page: 12, children: [
-          { title: "Perspectives on Networking", page: 12, children: [] },
-          { title: "TCP/IP Networking Model", page: 15, children: [] },
-        ] },
-        { title: "Chapter Review", page: 28, children: [] },
-      ] },
-    ];
-    const out = childBookmarks(tree, { title: "Chapter 1", start_page: 10, end_page: 30 });
-    expect(out.map((c) => c.title)).toEqual(["Perspectives on Networking", "TCP/IP Networking Model"]);
+  // Mục lục thật của 2 giáo trình (trích bookmark bằng PyMuPDF): roadmap phải bám đúng sách.
+  const fixture = (name: string) =>
+    JSON.parse(readFileSync(path.join(__dirname, "fixtures", `outline-${name}.json`), "utf8")) as { pageCount: number; tree: OutlineNode[] };
+  const build = async (name: string) => {
+    const { flattenOutline, pickStudyChapters } = await import("../src/services/pdf.service.js");
+    const { structureBook, findNode, roadmapReport, REVIEW_TOPIC, MAX_TOPIC_PAGES } = await import("../src/services/roadmap.service.js");
+    const { pageCount, tree } = fixture(name);
+    const ranges = pickStudyChapters(buildRanges(flattenOutline(tree, pageCount), pageCount));
+    const plan = structureBook(ranges, (r) => findNode(tree, r)?.children ?? []);
+    return { plan, tree, pageCount, report: roadmapReport(plan, pageCount, tree, "bookmark", false), REVIEW_TOPIC, MAX_TOPIC_PAGES };
+  };
+  const lessonsOf = (plan: { lessons: { from: number; to: number; source_title: string; title: string }[] }[]) => plan.flatMap((s) => s.lessons);
+  const walk = (ns: OutlineNode[], depth = 0): (OutlineNode & { depth: number })[] => ns.flatMap((n) => [{ ...n, depth }, ...walk(n.children, depth + 1)]);
+
+  it.skipIf(!books)("chặng = chương sách (không tách chương dài, tách Part → Chapter)", async () => {
+    const comptia = await build("comptia-tech");
+    expect(comptia.plan.map((s) => s.source_title)).toEqual(Array.from({ length: 12 }, (_, i) => expect.stringMatching(new RegExp(`^Chapter ${i + 1} `))));
+    const ccna = await build("ccna");
+    expect(ccna.plan.map((s) => s.source_title)).toEqual(Array.from({ length: 29 }, (_, i) => expect.stringMatching(new RegExp(`^Chapter ${i + 1} `))));
   });
-  it("roadmap tất định: gộp mục quá ngắn, chia mục quá dài, khoảng trang liên tục", async () => {
-    const { deterministicPlan } = await import("../src/services/roadmap.service.js");
+
+  for (const name of ["comptia-tech", "ccna"]) {
+    it.skipIf(!books)(`${name}: bài học không chồng trang, theo thứ tự, ≤ MAX_TOPIC_PAGES`, async () => {
+      const { plan, MAX_TOPIC_PAGES } = await build(name);
+      const lessons = lessonsOf(plan);
+      lessons.forEach((l, i) => {
+        expect(l.to).toBeGreaterThanOrEqual(l.from);
+        expect(l.to - l.from + 1).toBeLessThanOrEqual(MAX_TOPIC_PAGES);
+        if (i) expect(l.from).toBeGreaterThan(lessons[i - 1].to);
+      });
+    });
+
+    it.skipIf(!books)(`${name}: phần ôn tập cuối chương không thành bài học, được liệt kê trong báo cáo`, async () => {
+      const { plan, tree, report, REVIEW_TOPIC } = await build(name);
+      const lessons = lessonsOf(plan);
+      for (const l of lessons) expect(l.source_title).not.toMatch(REVIEW_TOPIC);
+      // Trang thứ 2 trở đi của mục ôn tập (trang đầu có thể chung với đoạn cuối bài) không thuộc bài nào.
+      const nodes = walk(tree).sort((a, b) => a.page - b.page);
+      for (const n of nodes.filter((x) => x.depth >= 1 && REVIEW_TOPIC.test(x.title.replace(/\s+/g, " ")))) {
+        const next = nodes.find((m) => m.page > n.page);
+        if (!next || next.page - n.page < 2) continue;
+        expect(lessons.some((l) => l.from <= n.page + 1 && n.page + 1 <= l.to), `${n.title} tr.${n.page + 1}`).toBe(false);
+      }
+      // Báo cáo khớp với bài học: trang được học + trang bỏ qua = toàn bộ sách.
+      const skippedPages = report.skipped.reduce((n, s) => n + s.to - s.from + 1, 0);
+      expect(report.covered + skippedPages).toBe(report.page_count);
+      expect(report.skipped.every((s) => s.titles.length > 0)).toBe(true);
+    });
+  }
+
+  it.skipIf(!books)("CompTIA: chia theo mục con thật của sách, không cắt máy móc", async () => {
+    const { plan } = await build("comptia-tech");
+    const titles = lessonsOf(plan).map((l) => l.source_title);
+    expect(titles).toEqual(expect.arrayContaining(["Motherboards", "Processors", "Memory", "Managing Users and Passwords", "Using Data Encryption"]));
+    // Chương 6: không còn bài toàn trang ôn tập (Summary/Lab/Review Questions 421–428).
+    const ch6 = plan.find((s) => s.source_title.startsWith("Chapter 6"))!;
+    expect(ch6.to).toBeLessThan(422);
+  });
+
+  it.skipIf(!books)("CCNA: bỏ 'Do I Know This Already?', 'Chapter Review', 'Part Review'; giữ mục con sát trang ôn tập", async () => {
+    const { plan, report } = await build("ccna");
+    const ch8 = plan.find((s) => s.source_title.startsWith("Chapter 8"))!;
+    expect(ch8.lessons.map((l) => l.source_title)[0]).toBe("Virtual LAN Concepts");
+    expect(ch8.to).toBe(259); // "Mismatched Native VLAN on a Trunk" (tr.259) nằm chung trang với Chapter Review
+    expect(report.skipped.some((s) => s.titles.includes("Part I: Review"))).toBe(true);
+  });
+
+  it("roadmap không có bookmark con: dùng tiêu đề dò từ text, mục quá ngắn gộp vào bài trước", async () => {
+    const { structureBook } = await import("../src/services/roadmap.service.js");
     const range = { title: "Chương 1", start_page: 1, end_page: 40 };
-    const plan = deterministicPlan([range], () => [
-      { title: "A", page: 5 },
-      { title: "B (ngắn)", page: 6 },
-      { title: "C", page: 8 },
+    const plan = structureBook([range], () => [
+      { title: "A", page: 5, children: [] },
+      { title: "B (ngắn)", page: 6, children: [] },
+      { title: "C", page: 8, children: [] },
     ]);
-    const topics = plan[0].topics;
-    expect(topics.map((t) => t.title)).not.toContain("B (ngắn)");
-    expect(topics[0].start_page).toBe(1);
-    // C dài 33 trang (8–40) → chia thành nhiều phần ≤ 15 trang
-    expect(topics.filter((t) => t.title.startsWith("C")).length).toBeGreaterThanOrEqual(3);
-    const starts = topics.map((t) => t.start_page);
-    expect([...starts].sort((a, b) => a - b)).toEqual(starts);
+    const lessons = plan[0].lessons;
+    expect(lessons[0].from).toBe(1);
+    expect(lessons.map((l) => l.source_title)).not.toContain("B (ngắn)");
+    expect(lessons.at(-1)!.to).toBe(40);
+    for (const l of lessons) expect(l.to - l.from + 1).toBeLessThanOrEqual(20);
   });
   it("dò tiêu đề từ text, bỏ header lặp lại", async () => {
     const { headingCandidates } = await import("../src/services/roadmap.service.js");
@@ -196,5 +251,78 @@ describe("roadmap", () => {
     ];
     const titles = headingCandidates(pages).map((c) => c.title);
     expect(titles).toEqual(["1.1 Mô hình OSI", "1.2 Giao Thức TCP", "Tầng Ứng Dụng Và Dịch Vụ"]);
+  });
+});
+
+describe("grounding (đối chiếu nội dung AI với sách)", () => {
+  const pages = [
+    { page: 48, text: "Exploring Motherboards\nThe spine of the computer is the system board, otherwise known as the motherboard. On the motherboard you will find the CPU, underlying circuitry, expansion slots, video components, RAM slots, and a vari-\nety of other chips." },
+    { page: 49, text: "Random Access Memory (RAM) is the main working memory of the computer. Data in RAM is lost when the power is turned off.\nThe chipset controls the flow of data between the CPU and memory." },
+  ];
+
+  it("tìm câu trích nguyên văn, chịu được sửa nhẹ (dấu câu, hoa thường, gạch nối ngắt dòng)", async () => {
+    const { quoteLocator } = await import("../src/services/ai/grounding.js");
+    const locate = quoteLocator(pages);
+    expect(locate("the system board, otherwise known as the motherboard", 49)?.page).toBe(48);
+    expect(locate("expansion slots, video components, RAM slots, and a variety of other chips")?.page).toBe(48);
+    expect(locate("Data in RAM is lost when the power is turned off.", 49)?.page).toBe(49);
+  });
+
+  it("không chấp nhận câu bịa, diễn giải lại hoặc quá ngắn", async () => {
+    const { quoteLocator } = await import("../src/services/ai/grounding.js");
+    const locate = quoteLocator(pages);
+    expect(locate("RAM keeps its data permanently even without power supply")).toBeNull();
+    expect(locate("The motherboard is where all the important parts get connected together")).toBeNull();
+    expect(locate("the motherboard")).toBeNull();
+  });
+
+  it("applyGrounding: loại ý/thuật ngữ/câu hỏi không có bằng chứng, sửa số trang, gắn nhãn dẫn chứng bài giảng", async () => {
+    const { applyGrounding } = await import("../src/services/ai/grounding.js");
+    const g = applyGrounding({
+      pages,
+      subtopics: [
+        { title: "Motherboards", from: 48, to: 48 },
+        { title: "Chipsets", from: 50, to: 50 },
+      ],
+      lesson_md: "Bo mạch chủ là xương sống [^1]. RAM giữ dữ liệu vĩnh viễn [^2].",
+      lesson_quotes: [
+        { k: 1, page: 49, quote: "The spine of the computer is the system board, otherwise known as the motherboard" },
+        { k: 2, page: 49, quote: "RAM keeps all data permanently after shutdown" },
+      ],
+      key_points: [
+        { point: "RAM mất dữ liệu khi tắt nguồn", page: 48, quote: "Data in RAM is lost when the power is turned off" },
+        { point: "Ý bịa", page: 48, quote: "CPUs are cooled by liquid nitrogen in every modern computer" },
+      ],
+      key_terms: [
+        { term: "Motherboard (bo mạch chủ)", definition: "...", page: 48, quote: "otherwise known as the motherboard. On the motherboard you will find the CPU" },
+        { term: "Quantum bus", definition: "...", page: 48, quote: "otherwise known as the motherboard. On the motherboard you will find the CPU" },
+      ],
+      questions: [
+        { source_page: 48, source_quote: "The chipset controls the flow of data between the CPU and memory" },
+        { source_page: 48, source_quote: null },
+      ],
+    });
+    expect(g.key_points).toEqual([expect.objectContaining({ point: "RAM mất dữ liệu khi tắt nguồn", page: 49, verified: true })]);
+    expect(g.key_terms.map((t) => t.term)).toEqual(["Motherboard (bo mạch chủ)"]);
+    expect(g.questions).toEqual([expect.objectContaining({ source_page: 49, verified: true })]);
+    expect(g.lesson_md).toBe("Bo mạch chủ là xương sống (tr. 48 #1). RAM giữ dữ liệu vĩnh viễn (chưa kiểm chứng).");
+    expect(g.grounding.lesson).toEqual({ verified: 1, total: 2 });
+    expect(g.grounding.missing.map((m) => m.title)).toEqual(["Chipsets"]);
+  });
+
+  it("PDF scan: không đối chiếu được → giữ nguyên, gắn verified = false", async () => {
+    const { applyGrounding } = await import("../src/services/ai/grounding.js");
+    const g = applyGrounding({ pages: null, subtopics: [], lesson_md: "Ý [^1].", lesson_quotes: [{ k: 1, page: 5, quote: "x" }], key_points: [{ point: "a", page: 5 }] });
+    expect(g.grounding.mode).toBe("file");
+    expect(g.key_points[0].verified).toBe(false);
+    expect(g.lesson_md).toBe("Ý (tr. 5).");
+  });
+
+  it.skipIf(!books)("mục con của bài theo mục lục sách (CCNA: Virtual LAN Concepts)", async () => {
+    const { subtopicsOf } = await import("../src/services/roadmap.service.js");
+    const { tree } = JSON.parse(readFileSync(path.join(__dirname, "fixtures", "outline-ccna.json"), "utf8"));
+    const subs = subtopicsOf(tree, { from: 233, to: 238, source_title: "Virtual LAN Concepts" });
+    expect(subs.map((s) => s.title)).toContain("VLAN Tagging Concepts");
+    expect(subs.every((s) => s.from > 233 && s.to <= 238)).toBe(true);
   });
 });

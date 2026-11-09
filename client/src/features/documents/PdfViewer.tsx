@@ -12,7 +12,29 @@ import { Button, IconButton, Spinner, Tabs } from "../../components/ui";
 pdfjs.GlobalWorkerOptions.workerSrc = new URL("pdfjs-dist/build/pdf.worker.min.mjs", import.meta.url).toString();
 
 /** Khoảng trang đang xem: 1 trang (from = to) hoặc nhiều trang khi nội dung trích dẫn trải dài. */
-export type PageRange = { from: number; to: number };
+/** quote: câu gốc cần tô sáng trong trang (dẫn chứng đã đối chiếu với sách). */
+export type PageRange = { from: number; to: number; quote?: string };
+
+const words = (s: string) => (s.normalize("NFKC").toLowerCase().match(/[\p{L}\p{N}]+/gu) ?? []).join(" ");
+const esc = (s: string) => s.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]!);
+
+/**
+ * Tô sáng câu trích trong lớp chữ của react-pdf: mỗi mẩu chữ (thường là 1 dòng) được tô nếu nó là một phần
+ * của câu trích, hoặc chứa ≥ 3 từ liên tiếp của câu trích.
+ */
+function quoteHighlighter(quote: string) {
+  const q = words(quote);
+  const qt = q.split(" ");
+  const tri = new Set(qt.slice(0, -2).map((_, i) => qt.slice(i, i + 3).join(" ")));
+  return ({ str }: { str: string }) => {
+    const t = words(str);
+    if (!t) return esc(str);
+    const tt = t.split(" ");
+    const part = t.length >= 6 && ` ${q} `.includes(` ${t} `);
+    const overlap = tt.some((_, i) => i + 3 <= tt.length && tri.has(tt.slice(i, i + 3).join(" ")));
+    return part || overlap ? `<mark class="pdf-hl">${esc(str)}</mark>` : esc(str);
+  };
+}
 
 type Translation = { from: number; to: number; pages: { page: number; text: string | null; status: "translated" | "original" | "empty" }[] };
 
@@ -193,6 +215,7 @@ export function PdfViewer({
   };
   const pages = Array.from({ length: Math.min(range.to - range.from + 1, MAX_RANGE) }, (_, i) => range.from + i);
   const zi = ZOOMS.indexOf(zoom);
+  const highlight = useMemo(() => (range.quote ? quoteHighlighter(range.quote) : undefined), [range.quote]);
   // Chưa cài VI-Translate ở server → bản dịch chữ (Gemini).
   const [pdfTranslation, setPdfTranslation] = useState(true);
   const onUnavailable = useCallback(() => setPdfTranslation(false), []);
@@ -260,7 +283,16 @@ export function PdfViewer({
           >
             {pages.map((p) => (
               <div key={p} className="shadow-sm">
-                <Page pageNumber={p} width={Math.round(width * zoom)} loading={<div className="grid h-64 place-items-center"><Spinner /></div>} />
+                <Page
+                  pageNumber={p}
+                  width={Math.round(width * zoom)}
+                  loading={<div className="grid h-64 place-items-center"><Spinner /></div>}
+                  customTextRenderer={highlight}
+                  onRenderTextLayerSuccess={() => {
+                    if (!range.quote) return;
+                    box.current?.querySelector("mark.pdf-hl")?.scrollIntoView({ block: "center", behavior: "smooth" });
+                  }}
+                />
                 {pages.length > 1 && <p className="bg-slate-50 py-1 text-center text-[12px] text-slate-400 dark:bg-slate-950">Trang {p}</p>}
               </div>
             ))}

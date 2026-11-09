@@ -288,3 +288,12 @@
   font-size: 17px;
   font-weight: 600;
 }
+
+/* Câu gốc trong PDF được tô sáng khi mở từ một dẫn chứng đã đối chiếu (PdfViewer). */
+.react-pdf__Page__textContent mark.pdf-hl {
+  background: rgb(234 179 8 / 0.38);
+  color: transparent;
+  border-radius: 2px;
+  padding: 0;
+  margin: 0;
+}

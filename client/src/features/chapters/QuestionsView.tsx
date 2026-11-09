@@ -3,6 +3,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { errorMessage, http } from "../../api/client";
 import { Badge, Button, cn, DIFFICULTY_LABEL, Empty, TYPE_LABEL } from "../../components/ui";
 import { toast } from "../../stores/toast";
+import { ask } from "../../stores/confirm";
 import type { ChapterDetail, Difficulty, Question, QuestionType } from "../../types";
 import { PageLink, type OpenPages } from "./SummaryView";
 import { CircleHelp, Sparkles } from "lucide-react";
@@ -11,7 +12,7 @@ function QuestionCard({ q, index, onPage, chapterId }: { q: Question; index: num
   const [open, setOpen] = useState(false);
   const qc = useQueryClient();
   const report = async () => {
-    if (!confirm("Xóa câu hỏi này vì sai/không phù hợp?")) return;
+    if (!(await ask({ title: "Xóa câu hỏi này?", message: "Dùng khi câu hỏi sai hoặc không phù hợp.", confirmLabel: "Xóa", danger: true }))) return;
     try {
       await http.delete(`/chapters/${chapterId}/questions/${q.id}`);
       await qc.invalidateQueries({ queryKey: ["chapter", chapterId] });
@@ -56,10 +57,15 @@ function QuestionCard({ q, index, onPage, chapterId }: { q: Question; index: num
           <p className="flex items-start justify-between gap-2 font-semibold text-emerald-800 dark:text-emerald-300">
             <span>
               Đáp án: {q.correct_answer}
-              <PageLink page={q.source_page} onPage={onPage} />
+              <PageLink page={q.source_page} onPage={onPage} quote={q.source_quote} verified={q.verified} />
             </span>
           </p>
           <p className="mt-1 text-slate-700 dark:text-slate-300">{q.explanation}</p>
+          {q.source_quote && (
+            <blockquote className="mt-2 border-l-2 border-emerald-300 pl-3 text-[13px] text-slate-600 italic dark:border-emerald-500/40 dark:text-slate-400">
+              Sách viết: “{q.source_quote}”
+            </blockquote>
+          )}
         </div>
       )}
     </li>

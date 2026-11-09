@@ -38,7 +38,7 @@ documentRoutes.post("/", uploadPdf, async (req, res) => {
 });
 
 documentRoutes.get("/", async (req, res) => {
-  const docs = await Document.findAll({ where: { user_id: req.userId }, order: [["created_at", "DESC"]] });
+  const docs = await Document.findAll({ where: { user_id: req.userId }, order: [["created_at", "DESC"]], attributes: { exclude: ["roadmap_report"] } });
   const counts = (await Chapter.findAll({
     attributes: ["document_id", [sequelize.fn("COUNT", sequelize.col("id")), "n"], [sequelize.fn("COUNT", sequelize.col("completed_at")), "completed"]],
     where: { document_id: docs.map((d) => d.id) },
@@ -54,7 +54,7 @@ documentRoutes.get("/:id", async (req, res) => {
   const chapters = await Chapter.findAll({
     where: { document_id: doc.id },
     order: [["order_index", "ASC"]],
-    attributes: ["id", "order_index", "title", "start_page", "end_page", "status", "section_id", "description", "importance", "est_minutes", "completed_at"],
+    attributes: ["id", "order_index", "title", "source_title", "start_page", "end_page", "status", "section_id", "description", "importance", "est_minutes", "completed_at"],
   });
   const sections = await RoadmapSection.findAll({ where: { document_id: doc.id }, order: [["order_index", "ASC"]] });
   res.json({
@@ -63,6 +63,26 @@ documentRoutes.get("/:id", async (req, res) => {
     sections,
     chapters: chapters.map((c) => ({ ...c.toJSON(), analyzing: isAnalyzing(c.id) })),
   });
+});
+
+const titleBody = z.object({ title: z.string().trim().min(1, "Tiêu đề không được để trống").max(250) });
+
+/** Đổi tên tài liệu. */
+documentRoutes.patch("/:id", async (req, res) => {
+  const doc = await findOwnedDocument(req.params.id, req.userId);
+  const { title } = titleBody.parse(req.body);
+  await doc.update({ title });
+  res.json({ id: doc.id, title: doc.title });
+});
+
+/** Đổi tên chặng trong lộ trình. */
+documentRoutes.patch("/:id/sections/:sectionId", async (req, res) => {
+  const doc = await findOwnedDocument(req.params.id, req.userId);
+  const { title } = titleBody.parse(req.body);
+  const section = await RoadmapSection.findOne({ where: { id: Number(req.params.sectionId), document_id: doc.id } });
+  if (!section) throw new HttpError(404, "Không tìm thấy chặng");
+  await section.update({ title });
+  res.json({ id: section.id, title: section.title });
 });
 
 /** SSE tiến độ. Gửi trạng thái hiện tại ngay khi kết nối để không lỡ sự kiện đã phát trước đó. */
@@ -166,7 +186,7 @@ documentRoutes.get("/:id/translation/pdf/:chunk", async (req, res) => {
   res.type("application/pdf").sendFile(file);
 });
 
-/** Lập lại roadmap (xóa bài học cũ). Dùng cho tài liệu tạo trước khi có roadmap hoặc khi muốn chia lại. */
+/** Lập lại roadmap từ mục lục sách. Bài giữ nguyên khoảng trang thì giữ bài giảng và tiến độ. */
 documentRoutes.post("/:id/roadmap/rebuild", async (req, res) => {
   const doc = await findOwnedDocument(req.params.id, req.userId);
   if (doc.status === "processing" || doc.status === "queued") throw new HttpError(409, "Tài liệu đang được xử lý");

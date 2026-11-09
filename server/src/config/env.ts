@@ -24,6 +24,7 @@ const schema = z.object({
   MAX_UPLOAD_MB: z.coerce.number().default(50),
   // VI-Translate (dịch PDF giữ bố cục), clone vào thư mục này + .venv. Không có thì tab Bản dịch dùng Gemini dịch chữ.
   VI_TRANSLATE_DIR: z.string().default("../vi-translate"),
+  TRANSLATE_BROWSER: z.enum(["chrome", "edge", "brave", "coccoc", "firefox"]).default("chrome"),
 });
 
 const parsed = schema.parse(process.env);

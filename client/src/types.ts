@@ -21,6 +21,8 @@ export type ChapterItem = {
   id: number;
   order_index: number;
   title: string;
+  /** Tên mục gốc trong sách (để đối chiếu). */
+  source_title?: string | null;
   start_page: number;
   end_page: number;
   status: ChapterStatus;
@@ -32,12 +34,34 @@ export type ChapterItem = {
   completed_at?: string | null;
 };
 
-export type RoadmapSection = { id: number; order_index: number; title: string; description: string | null };
+export type RoadmapSection = { id: number; order_index: number; title: string; source_title?: string | null; description: string | null };
 
-export type DocumentDetail = DocumentItem & { chapters: ChapterItem[]; sections: RoadmapSection[] };
+/** Đối chiếu roadmap với sách: trang được học và các đoạn bị bỏ qua (kèm tên mục trong sách). */
+export type RoadmapReport = {
+  page_count: number;
+  covered: number;
+  skipped: { from: number; to: number; titles: string[] }[];
+  source: "bookmark" | "toc" | "fixed";
+  ai: boolean;
+};
 
-export type KeyPoint = { point: string; page: number; page_end?: number };
-export type KeyTerm = { term: string; definition: string; page: number; page_end?: number };
+export type DocumentDetail = DocumentItem & { chapters: ChapterItem[]; sections: RoadmapSection[]; roadmap_report?: RoadmapReport | null };
+
+/** quote: câu trích nguyên văn từ sách; verified: máy đã tìm thấy câu trích trong text trang. */
+export type KeyPoint = { point: string; page: number; page_end?: number; quote?: string; verified?: boolean };
+export type KeyTerm = { term: string; definition: string; page: number; page_end?: number; quote?: string; verified?: boolean };
+export type Evidence = { k: number; page: number; quote: string; verified: boolean };
+export type Subtopic = { title: string; from: number; to: number };
+/** Kết quả đối chiếu bài với sách (server: services/ai/grounding.ts). */
+export type Grounding = {
+  mode: "text" | "file";
+  lesson: { verified: number; total: number };
+  points: { kept: number; dropped: number };
+  terms: { kept: number; dropped: number };
+  questions: { kept: number; dropped: number };
+  missing: Subtopic[];
+  subtopics: number;
+};
 export type Summary = {
   id: number;
   overview: string;
@@ -45,6 +69,8 @@ export type Summary = {
   key_terms: KeyTerm[];
   mindmap_mermaid: string | null;
   lesson_md: string | null;
+  evidence?: Evidence[] | null;
+  grounding?: Grounding | null;
 };
 
 export type QuestionType = "mcq" | "true_false" | "short_answer";
@@ -61,6 +87,8 @@ export type Question = {
   explanation: string;
   source_page: number;
   topic: string;
+  source_quote?: string | null;
+  verified?: boolean | null;
 };
 export type PublicQuestion = Omit<Question, "correct_answer" | "explanation">;
 

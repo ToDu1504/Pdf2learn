@@ -35,16 +35,16 @@ export const summarySchema = {
       type: Type.ARRAY,
       items: {
         type: Type.OBJECT,
-        properties: { point: { type: Type.STRING }, page: { type: Type.INTEGER }, page_end: { type: Type.INTEGER, description: "Trang kết thúc nếu ý trải dài nhiều trang; bỏ trống nếu chỉ 1 trang" } },
-        required: ["point", "page"],
+        properties: { point: { type: Type.STRING }, page: { type: Type.INTEGER }, page_end: { type: Type.INTEGER, description: "Trang kết thúc nếu ý trải dài nhiều trang; bỏ trống nếu chỉ 1 trang" }, quote: { type: Type.STRING, description: "Trích NGUYÊN VĂN 8–30 từ liên tiếp từ sách (copy y hệt, giữ ngôn ngữ gốc) chứng minh ý này" } },
+        required: ["point", "page", "quote"],
       },
     },
     key_terms: {
       type: Type.ARRAY,
       items: {
         type: Type.OBJECT,
-        properties: { term: { type: Type.STRING }, definition: { type: Type.STRING }, page: { type: Type.INTEGER }, page_end: { type: Type.INTEGER, description: "Trang kết thúc nếu ý trải dài nhiều trang; bỏ trống nếu chỉ 1 trang" } },
-        required: ["term", "definition", "page"],
+        properties: { term: { type: Type.STRING, description: "Thuật ngữ đúng như trong sách (có thể thêm nghĩa tiếng Việt trong ngoặc)" }, definition: { type: Type.STRING }, page: { type: Type.INTEGER }, page_end: { type: Type.INTEGER, description: "Trang kết thúc nếu ý trải dài nhiều trang; bỏ trống nếu chỉ 1 trang" }, quote: { type: Type.STRING, description: "Trích NGUYÊN VĂN 8–30 từ liên tiếp từ sách (copy y hệt, giữ ngôn ngữ gốc) chứng minh ý này" } },
+        required: ["term", "definition", "page", "quote"],
       },
     },
   },
@@ -52,8 +52,8 @@ export const summarySchema = {
 };
 export const SummaryZod = z.object({
   overview: z.string().min(1),
-  key_points: z.array(z.object({ point: z.string(), page: z.number().int(), page_end: z.number().int().optional() })),
-  key_terms: z.array(z.object({ term: z.string(), definition: z.string(), page: z.number().int(), page_end: z.number().int().optional() })),
+  key_points: z.array(z.object({ point: z.string(), page: z.number().int(), page_end: z.number().int().optional(), quote: z.string().optional() })),
+  key_terms: z.array(z.object({ term: z.string(), definition: z.string(), page: z.number().int(), page_end: z.number().int().optional(), quote: z.string().optional() })),
 });
 export type SummaryData = z.infer<typeof SummaryZod>;
 
@@ -72,9 +72,10 @@ export const quizSchema = {
           correct_answer: { type: Type.STRING },
           explanation: { type: Type.STRING },
           source_page: { type: Type.INTEGER },
+          source_quote: { type: Type.STRING, description: "Trích NGUYÊN VĂN 8–30 từ liên tiếp từ sách (copy y hệt) chứng minh đáp án đúng" },
           topic: { type: Type.STRING },
         },
-        required: ["type", "difficulty", "content", "correct_answer", "explanation", "source_page", "topic"],
+        required: ["type", "difficulty", "content", "correct_answer", "explanation", "source_page", "source_quote", "topic"],
       },
     },
   },
@@ -90,6 +91,7 @@ const QuestionZod = z
     correct_answer: z.string().min(1),
     explanation: z.string(),
     source_page: z.number().int(),
+    source_quote: z.string().optional(),
     topic: z.string().min(1),
   })
   .transform((q) => {
@@ -115,15 +117,38 @@ export type GeneratedQuestion = z.infer<typeof QuestionZod>;
 /** Tóm tắt + câu hỏi trong 1 lượt gọi (pipeline): tiết kiệm 1/2 hạn mức request. */
 export const analysisSchema = {
   type: Type.OBJECT,
-  properties: { lesson: { type: Type.STRING }, ...summarySchema.properties, questions: quizSchema.properties.questions },
-  required: ["lesson", ...summarySchema.required, "questions"],
+  properties: {
+    lesson: { type: Type.STRING },
+    lesson_quotes: {
+      type: Type.ARRAY,
+      description: "Bằng chứng cho các dấu [^k] trong lesson",
+      items: {
+        type: Type.OBJECT,
+        properties: { k: { type: Type.INTEGER }, page: { type: Type.INTEGER }, quote: { type: Type.STRING, description: "Trích NGUYÊN VĂN 8–30 từ liên tiếp từ sách" } },
+        required: ["k", "page", "quote"],
+      },
+    },
+    ...summarySchema.properties,
+    questions: quizSchema.properties.questions,
+  },
+  required: ["lesson", "lesson_quotes", ...summarySchema.required, "questions"],
 };
+export const LessonQuotesZod = z
+  .array(z.unknown())
+  .catch([])
+  .transform((xs) =>
+    xs.flatMap((x) => {
+      const r = z.object({ k: z.coerce.number().int(), page: z.coerce.number().int(), quote: z.string() }).safeParse(x);
+      return r.success ? [r.data] : [];
+    }),
+  );
 export const AnalysisZod = z
   .object({ questions: z.array(z.unknown()).default([]) })
   .passthrough()
   .transform((raw) => ({
     summary: SummaryZod.parse(raw),
     lesson: typeof raw.lesson === "string" && raw.lesson.trim() ? raw.lesson.trim() : null,
+    lesson_quotes: LessonQuotesZod.parse(raw.lesson_quotes ?? []),
     questions: QuizZod.parse({ questions: raw.questions }),
   }));
 
@@ -186,8 +211,12 @@ export const excerptSchema = {
       type: Type.ARRAY,
       items: {
         type: Type.OBJECT,
-        properties: { text: { type: Type.STRING }, page: { type: Type.INTEGER } },
-        required: ["text", "page"],
+        properties: {
+          text: { type: Type.STRING, description: "Tóm lược trung thành bằng tiếng Việt" },
+          quote: { type: Type.STRING, description: "Trích NGUYÊN VĂN 8–30 từ liên tiếp từ sách (copy y hệt)" },
+          page: { type: Type.INTEGER },
+        },
+        required: ["text", "quote", "page"],
       },
     },
   },
@@ -195,5 +224,13 @@ export const excerptSchema = {
 };
 export const ExcerptZod = z.object({
   found: z.boolean(),
-  excerpts: z.array(z.object({ text: z.string(), page: z.number().int() })),
+  excerpts: z.array(z.object({ text: z.string(), quote: z.string().optional(), page: z.number().int() })),
 });
+
+/** Bổ sung bài giảng cho các mục con còn thiếu: markdown + bằng chứng, cùng quy ước [^k] như lesson. */
+export const supplementSchema = {
+  type: Type.OBJECT,
+  properties: { lesson: analysisSchema.properties.lesson, lesson_quotes: analysisSchema.properties.lesson_quotes },
+  required: ["lesson", "lesson_quotes"],
+};
+export const SupplementZod = z.object({ lesson: z.string(), lesson_quotes: LessonQuotesZod });

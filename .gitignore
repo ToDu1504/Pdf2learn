@@ -8,3 +8,6 @@ vi-translate/
 .cache/
 translate-service/
 server/_*.ts
+
+# Mục lục sách có bản quyền dùng cho test (chỉ để ở máy dev)
+server/tests/fixtures/outline-*.json

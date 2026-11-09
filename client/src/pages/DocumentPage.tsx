@@ -5,7 +5,7 @@ import { BarChart3, Check, ChevronLeft, ChevronRight, CircleAlert, Clock, Downlo
 import { download, errorMessage, http } from "../api/client";
 import { useChapter, useDocument } from "../api/queries";
 import { Page } from "../components/Layout";
-import { Badge, Button, cn, Empty, ProgressBar, Skeleton, Spinner, Tabs } from "../components/ui";
+import { Badge, Button, cn, EditableTitle, Empty, ProgressBar, Skeleton, Spinner, Tabs } from "../components/ui";
 import { SummaryView, type SummaryFocus } from "../features/chapters/SummaryView";
 import { QuestionsView } from "../features/chapters/QuestionsView";
 import { Mindmap } from "../features/chapters/Mindmap";
@@ -14,8 +14,10 @@ import { QuizSetup } from "../features/quiz/QuizSetup";
 import { RoadmapView, StateIcon, groupLessons, lessonState } from "../features/roadmap/RoadmapView";
 import { LessonBody } from "../features/roadmap/LessonBody";
 import { QuickCheck } from "../features/roadmap/QuickCheck";
+import { GroundingPanel } from "../features/roadmap/GroundingPanel";
 import { stepLabel, useDocumentProgress } from "../hooks/useDocumentProgress";
 import { toast } from "../stores/toast";
+import { ask } from "../stores/confirm";
 import type { PageRange } from "../features/documents/PdfViewer";
 import { STATUS } from "./Dashboard";
 
@@ -43,7 +45,7 @@ export function DocumentPage() {
   const [pdfRange, setPdfRange] = useState<PageRange | null>(null);
   const [pdfExpanded, setPdfExpanded] = useState(false);
   // Mở trang / khoảng trang trong PDF gốc (khoảng tối đa MAX_RANGE trang).
-  const setPdfPage = (from: number, to = from) => setPdfRange({ from, to: Math.min(Math.max(to, from), from + MAX_RANGE - 1) });
+  const setPdfPage = (from: number, to = from, quote?: string) => setPdfRange({ from, to: Math.min(Math.max(to, from), from + MAX_RANGE - 1), quote });
   const [editing, setEditing] = useState(false);
   const [quizOpen, setQuizOpen] = useState(false);
   const top = useRef<HTMLDivElement>(null);
@@ -105,7 +107,7 @@ export function DocumentPage() {
     }
   };
   const rebuild = async () => {
-    if (!confirm("Lập lại lộ trình? Các bài giảng và tiến độ hiện tại của tài liệu này sẽ bị xóa.")) return;
+    if (!(await ask({ title: "Lập lại lộ trình?", message: "Lộ trình được dựng lại theo mục lục của sách. Bài nào giữ nguyên khoảng trang sẽ giữ bài giảng, flashcard và tiến độ; bài đổi ranh giới sẽ được soạn lại.", confirmLabel: "Lập lại" }))) return;
     try {
       await http.post(`/documents/${id}/roadmap/rebuild`);
       setParams({});
@@ -115,8 +117,20 @@ export function DocumentPage() {
       toast.error(errorMessage(err));
     }
   };
+  // Đổi tên tài liệu / chặng / bài học rồi làm mới mọi nơi hiển thị tên đó.
+  const rename = async (url: string, title: string) => {
+    try {
+      await http.patch(url, { title });
+    } catch (err) {
+      toast.error(errorMessage(err));
+      throw err;
+    }
+    await Promise.all(
+      [["document", id], ["documents"], ["stats", "overview"], ["chapter", lessonId]].map((queryKey) => qc.invalidateQueries({ queryKey })),
+    );
+  };
   const remove = async () => {
-    if (!confirm(`Xóa "${doc.title}" cùng toàn bộ bài học, câu hỏi, flashcard?`)) return;
+    if (!(await ask({ title: `Xóa "${doc.title}"?`, message: "Toàn bộ bài học, câu hỏi và flashcard của tài liệu này sẽ bị xóa. Không thể hoàn tác.", confirmLabel: "Xóa", danger: true }))) return;
     await http.delete(`/documents/${id}`);
     await qc.invalidateQueries({ queryKey: ["documents"] });
     navigate("/app");
@@ -129,7 +143,8 @@ export function DocumentPage() {
       wide
       title={
         <span ref={top} className="flex flex-wrap items-center gap-3">
-          {doc.title} {progress.status !== "done" && <Badge color={STATUS[progress.status].color}>{STATUS[progress.status].label}</Badge>}
+          <EditableTitle value={doc.title} label="Đổi tên tài liệu" onSave={(t) => rename(`/documents/${id}`, t)} />{" "}
+          {progress.status !== "done" && <Badge color={STATUS[progress.status].color}>{STATUS[progress.status].label}</Badge>}
         </span>
       }
       actions={
@@ -195,7 +210,7 @@ export function DocumentPage() {
           <Empty icon={<Map />} title="Đang lập lộ trình học…">AI đang đọc cấu trúc giáo trình để chia thành các chặng và bài học.</Empty>
         </div>
       ) : !lessonId ? (
-        <RoadmapView doc={doc} onOpen={openLesson} />
+        <RoadmapView doc={doc} onOpen={openLesson} onRenameSection={(sid, t) => rename(`/documents/${id}/sections/${sid}`, t)} />
       ) : (
         <div className="grid gap-5 lg:grid-cols-[280px_minmax(0,1fr)]">
           <aside className="h-fit lg:sticky lg:top-8">
@@ -248,7 +263,14 @@ export function DocumentPage() {
                           Chặng {(doc.sections?.indexOf(section) ?? 0) + 1}: {section.title}
                         </p>
                       )}
-                      <h2 className="mt-1 text-[32px] leading-tight font-bold">{chapter.data.title}</h2>
+                      <h2 className="mt-1 text-[32px] leading-tight font-bold">
+                        <EditableTitle value={chapter.data.title} label="Đổi tên bài học" onSave={(t) => rename(`/chapters/${chapter.data!.id}`, t)} />
+                      </h2>
+                      {chapter.data.source_title && chapter.data.source_title !== chapter.data.title && (
+                        <p className="mt-1.5 text-[13px] text-slate-400" title="Tên mục trong sách">
+                          Theo sách: {chapter.data.source_title}
+                        </p>
+                      )}
                       {chapter.data.description && <p className="mt-2 text-[17px] text-slate-500">{chapter.data.description}</p>}
                       <p className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-[13px] text-slate-500">
                         {chapter.data.est_minutes ? (
@@ -283,6 +305,8 @@ export function DocumentPage() {
                     )}
                   </div>
 
+                  {chapter.data.summary && <GroundingPanel chapter={chapter.data} onPage={setPdfPage} />}
+
                   {!chapter.data.summary ? (
                     chapter.data.analyze_error && !chapter.data.analyzing ? (
                       <Empty icon={<CircleAlert />} title="Chưa soạn được bài này">
@@ -298,7 +322,7 @@ export function DocumentPage() {
                     )
                   ) : tab === "lesson" && chapter.data.summary.lesson_md ? (
                     <>
-                      <LessonBody markdown={chapter.data.summary.lesson_md} onPage={setPdfPage} />
+                      <LessonBody markdown={chapter.data.summary.lesson_md} onPage={setPdfPage} evidence={chapter.data.summary.evidence} />
                       <QuickCheck lesson={chapter.data} documentId={id} onNext={next ? () => openLesson(next.id) : undefined} />
                     </>
                   ) : tab === "summary" || tab === "lesson" ? (

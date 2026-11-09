@@ -7,6 +7,8 @@ import {
   type InferCreationAttributes,
 } from "sequelize";
 import { sequelize } from "../config/db.js";
+import type { RoadmapReport } from "../services/roadmap.service.js";
+import type { Evidence, Grounding, Subtopic } from "../services/ai/grounding.js";
 
 const pk = { type: DataTypes.INTEGER, autoIncrement: true, primaryKey: true };
 const int = (allowNull = false) => ({ type: DataTypes.INTEGER, allowNull });
@@ -68,6 +70,7 @@ export class Document extends Model<InferAttributes<Document>, InferCreationAttr
   declare current_step: CreationOptional<string | null>;
   declare progress: CreationOptional<number>;
   declare error_message: CreationOptional<string | null>;
+  declare roadmap_report: CreationOptional<RoadmapReport | null>;
   declare created_at: CreationOptional<Date>;
 }
 Document.init(
@@ -82,6 +85,7 @@ Document.init(
     current_step: str(true),
     progress: { type: DataTypes.TINYINT, defaultValue: 0 },
     error_message: text(true),
+    roadmap_report: json("roadmap_report", true),
     created_at: DataTypes.DATE,
   },
   { sequelize, tableName: "documents" },
@@ -93,6 +97,7 @@ export class Chapter extends Model<InferAttributes<Chapter>, InferCreationAttrib
   declare document_id: ForeignKey<Document["id"]>;
   declare order_index: number;
   declare title: string;
+  declare source_title: CreationOptional<string | null>;
   declare start_page: number;
   declare end_page: number;
   declare gemini_file_uri: CreationOptional<string | null>;
@@ -103,12 +108,14 @@ export class Chapter extends Model<InferAttributes<Chapter>, InferCreationAttrib
   declare importance: CreationOptional<"core" | "optional">;
   declare est_minutes: CreationOptional<number | null>;
   declare completed_at: CreationOptional<Date | null>;
+  declare subtopics: CreationOptional<Subtopic[] | null>;
 }
 Chapter.init(
   {
     id: pk,
     order_index: int(),
     title: str(),
+    source_title: { type: DataTypes.STRING(500), allowNull: true },
     start_page: int(),
     end_page: int(),
     gemini_file_uri: str(true),
@@ -119,12 +126,14 @@ Chapter.init(
     importance: { type: DataTypes.ENUM("core", "optional"), defaultValue: "core" },
     est_minutes: int(true),
     completed_at: { type: DataTypes.DATE, allowNull: true },
+    subtopics: json("subtopics", true),
   },
   { sequelize, tableName: "chapters" },
 );
 
-export type KeyPoint = { point: string; page: number; page_end?: number };
-export type KeyTerm = { term: string; definition: string; page: number; page_end?: number };
+/** quote: câu trích nguyên văn từ sách; verified: code đã tìm thấy câu trích trong text trang (xem ai/grounding.ts). */
+export type KeyPoint = { point: string; page: number; page_end?: number; quote?: string; verified?: boolean };
+export type KeyTerm = { term: string; definition: string; page: number; page_end?: number; quote?: string; verified?: boolean };
 export class Summary extends Model<InferAttributes<Summary>, InferCreationAttributes<Summary>> {
   declare id: CreationOptional<number>;
   declare chapter_id: number;
@@ -133,9 +142,21 @@ export class Summary extends Model<InferAttributes<Summary>, InferCreationAttrib
   declare key_terms: KeyTerm[];
   declare mindmap_mermaid: CreationOptional<string | null>;
   declare lesson_md: CreationOptional<string | null>;
+  declare evidence: CreationOptional<Evidence[] | null>;
+  declare grounding: CreationOptional<Grounding | null>;
 }
 Summary.init(
-  { id: pk, chapter_id: { ...int(), unique: true }, overview: text(), key_points: json("key_points"), key_terms: json("key_terms"), mindmap_mermaid: text(true), lesson_md: { type: DataTypes.TEXT("medium"), allowNull: true } },
+  {
+    id: pk,
+    chapter_id: { ...int(), unique: true },
+    overview: text(),
+    key_points: json("key_points"),
+    key_terms: json("key_terms"),
+    mindmap_mermaid: text(true),
+    lesson_md: { type: DataTypes.TEXT("medium"), allowNull: true },
+    evidence: json("evidence", true),
+    grounding: json("grounding", true),
+  },
   { sequelize, tableName: "summaries" },
 );
 
@@ -154,6 +175,8 @@ export class Question extends Model<InferAttributes<Question>, InferCreationAttr
   declare explanation: string;
   declare source_page: number;
   declare topic: string;
+  declare source_quote: CreationOptional<string | null>;
+  declare verified: CreationOptional<boolean | null>;
 }
 Question.init(
   {
@@ -167,6 +190,8 @@ Question.init(
     explanation: text(),
     source_page: int(),
     topic: str(),
+    source_quote: text(true),
+    verified: { type: DataTypes.BOOLEAN, allowNull: true },
   },
   { sequelize, tableName: "questions" },
 );
@@ -348,10 +373,11 @@ export class RoadmapSection extends Model<InferAttributes<RoadmapSection>, Infer
   declare document_id: number;
   declare order_index: number;
   declare title: string;
+  declare source_title: CreationOptional<string | null>;
   declare description: CreationOptional<string | null>;
 }
 RoadmapSection.init(
-  { id: pk, document_id: int(), order_index: int(), title: str(), description: text(true) },
+  { id: pk, document_id: int(), order_index: int(), title: str(), source_title: { type: DataTypes.STRING(500), allowNull: true }, description: text(true) },
   { sequelize, tableName: "roadmap_sections" },
 );
 
