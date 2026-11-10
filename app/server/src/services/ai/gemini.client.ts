@@ -93,6 +93,7 @@ export function availableModels() {
  * model dự phòng tiếp theo (mỗi model có hạn mức riêng). Hết sạch → QuotaExhaustedError.
  */
 export async function withModelFallback<T>(fn: (model: string) => Promise<T>): Promise<T> {
+  let overloaded: unknown = null;
   for (const model of availableModels()) {
     try {
       return await fn(model);
@@ -104,9 +105,16 @@ export async function withModelFallback<T>(fn: (model: string) => Promise<T>): P
         console.warn(`[ai] ${model} ${status === 404 ? "không dùng được" : "hết hạn mức ngày"}, chuyển model dự phòng`);
         continue;
       }
+      if (status === 503 || status === 500) {
+        // Model đang quá tải (đã thử lại vài lần): dùng model dự phòng cho lượt này, không đánh dấu hết lượt.
+        console.warn(`[ai] ${model} đang quá tải (${status}), thử model dự phòng`);
+        overloaded = err;
+        continue;
+      }
       throw err;
     }
   }
+  if (overloaded) throw overloaded; // mọi model đều quá tải: lỗi tạm thời, không phải hết hạn mức
   throw new QuotaExhaustedError();
 }
 

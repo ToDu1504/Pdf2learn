@@ -468,3 +468,22 @@ describe("tên chặng", () => {
     expect(keepPart("Memory", null)).toBe("Memory");
   });
 });
+
+describe("withModelFallback", () => {
+  it("model quá tải (503) → thử model dự phòng, không đánh dấu hết lượt", async () => {
+    const { env } = await import("../src/config/env.js");
+    env.GEMINI_MODEL = "m-main";
+    env.GEMINI_FALLBACK_MODELS = "m-backup";
+    const { withModelFallback, availableModels } = await import("../src/services/ai/gemini.client.js");
+    const tried: string[] = [];
+    const out = await withModelFallback(async (m) => {
+      tried.push(m);
+      if (m === "m-main") throw Object.assign(new Error("high demand"), { status: 503 });
+      return "ok";
+    });
+    expect(out).toBe("ok");
+    expect(tried).toEqual(["m-main", "m-backup"]);
+    expect(availableModels()).toContain("m-main");
+    await expect(withModelFallback(async () => Promise.reject(Object.assign(new Error("busy"), { status: 503 })))).rejects.toThrow("busy");
+  });
+});

@@ -90,6 +90,46 @@ export async function kickAutoPrepare() {
   }
 }
 
+const retrying = new Set<number>();
+
+/**
+ * Nút "Soạn lại bài lỗi": đưa mọi bài "failed" (dấu chấm than, thường do Gemini 503/mạng) về "pending" rồi soạn lần
+ * lượt ở nền theo thứ tự lộ trình (mỗi lượt analyzeFrom gộp nhiều bài / 1 lần gọi). Không chừa model dự phòng vì là
+ * việc người học vừa yêu cầu. Bài lỗi lần nữa thành "failed" và được bỏ qua → vòng lặp luôn dừng.
+ */
+export async function retryFailedLessons(doc: Document) {
+  const failed = await Chapter.findAll({ where: { document_id: doc.id, status: "failed" }, order: [["order_index", "ASC"]], attributes: ["id"] });
+  if (!failed.length) return 0;
+  const ids = failed.map((c) => c.id);
+  await Chapter.update({ status: "pending" }, { where: { id: ids } });
+  if (retrying.has(doc.id)) return ids.length; // vòng đang chạy sẽ gặp các bài vừa đưa về "pending"
+  retrying.add(doc.id);
+  void (async () => {
+    let done = 0;
+    try {
+      for (;;) {
+        const next = (await Chapter.findAll({ where: { id: ids, status: "pending" }, order: [["order_index", "ASC"]], attributes: ["id"] })).find(
+          (c) => !isAnalyzing(c.id),
+        );
+        if (!next) break;
+        try {
+          await analyzeFrom(doc, next.id);
+          done++;
+        } catch (err) {
+          if (err instanceof QuotaExhaustedError) break; // giữ "pending": vòng soạn nền làm tiếp khi hạn mức reset
+        }
+        await new Promise((r) => setTimeout(r, PAUSE_BETWEEN_MS));
+      }
+    } finally {
+      retrying.delete(doc.id);
+      console.log(`[retry] doc ${doc.id}: soạn lại ${done} lượt cho ${ids.length} bài lỗi`);
+    }
+  })();
+  return ids.length;
+}
+
+export const isRetryingFailed = (docId: number) => retrying.has(docId);
+
 /** Tự dịch toàn bộ các tài liệu chưa dịch xong (mỗi tài liệu thử lại sau TRANSLATE_RETRY_MS nếu lượt trước lỗi). */
 export async function kickAutoTranslate(only?: Document) {
   if (!isPdfTranslatorInstalled()) return;

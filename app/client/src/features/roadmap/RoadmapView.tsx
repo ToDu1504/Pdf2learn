@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
-import { ArrowRight, BookCheck, Check, ChevronDown, CircleAlert, Clock } from "lucide-react";
+import { ArrowRight, BookCheck, Check, ChevronDown, CircleAlert, Clock, RefreshCw } from "lucide-react";
+import { useRetryFailedLessons } from "../../api/queries";
 import { Button, cn, EditableTitle, ProgressBar, Spinner } from "../../components/ui";
 import type { ChapterItem, DocumentDetail, RoadmapReport } from "../../types";
 import { BookReviewActions } from "./BookReview";
@@ -115,6 +116,28 @@ function BookCheckPanel({ report }: { report: RoadmapReport }) {
  * Lộ trình dạng trục dọc mảnh: mỗi chặng là một mốc đánh số trên trục, bài học xếp hai bên
  * (màn rộng) hoặc một cột (điện thoại). Bấm bài học để mở bài giảng.
  */
+/** Soạn lại hàng loạt các bài lỗi (dấu chấm than). Ẩn khi không có bài lỗi và không có vòng soạn lại nào đang chạy. */
+function RetryFailed({ doc }: { doc: DocumentDetail }) {
+  const retry = useRetryFailedLessons(doc.id);
+  const failed = doc.chapters.filter((c) => c.status === "failed" && !c.analyzing).length;
+  const running = !!doc.retrying_failed;
+  if (!failed && !running) return null;
+  if (running)
+    return (
+      <p className="flex items-center gap-2 text-[13px] text-slate-500">
+        <Spinner className="size-3.5" /> Đang soạn lại các bài lỗi ở nền…
+      </p>
+    );
+  return (
+    <div className="flex flex-col items-start gap-1 md:items-end">
+      <Button variant="secondary" size="sm" loading={retry.isPending} onClick={() => retry.mutate()}>
+        <RefreshCw /> Soạn lại {failed} bài lỗi
+      </Button>
+      {retry.error && <p className="text-[13px] text-rose-600">Không bắt đầu được, thử lại sau.</p>}
+    </div>
+  );
+}
+
 export function RoadmapView({ doc, onOpen, onRenameSection }: { doc: DocumentDetail; onOpen: (lessonId: number) => void; onRenameSection?: (sectionId: number, title: string) => Promise<unknown> }) {
   const [hideOptional, setHideOptional] = useState(false);
   const groups = useMemo(() => groupLessons(doc), [doc]);
@@ -155,6 +178,7 @@ export function RoadmapView({ doc, onOpen, onRenameSection }: { doc: DocumentDet
             <p className="text-[17px] font-semibold text-emerald-600">Bạn đã hoàn thành lộ trình.</p>
           )}
           {next && <p className="max-w-xs truncate text-[13px] text-slate-500 md:text-right">{next.title}</p>}
+          <RetryFailed doc={doc} />
           {hasOptional && (
             <label className="flex cursor-pointer items-center gap-2 text-[13px] text-slate-500">
               <input type="checkbox" className="accent-brand-600" checked={hideOptional} onChange={(e) => setHideOptional(e.target.checked)} />

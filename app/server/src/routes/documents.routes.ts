@@ -1,3 +1,4 @@
+import { isRetryingFailed, retryFailedLessons } from "../services/autoPrepare.service.js";
 import { Router } from "express";
 import { existsSync } from "node:fs";
 import { unlink } from "node:fs/promises";
@@ -91,6 +92,7 @@ documentRoutes.get("/:id", async (req, res) => {
     ...doc.toJSON(),
     file_hash: undefined,
     sections,
+    retrying_failed: isRetryingFailed(doc.id),
     chapters: chapters.map((c) => ({ ...c.toJSON(), analyzing: isAnalyzing(c.id) })),
   });
 });
@@ -264,6 +266,12 @@ documentRoutes.post("/:id/retry", async (req, res) => {
   await doc.update({ status: "queued", error_message: null });
   enqueueDocument(doc.id);
   res.json(doc);
+});
+
+/** Soạn lại hàng loạt các bài lỗi (dấu chấm than trên lộ trình), chạy ở nền. */
+documentRoutes.post("/:id/lessons/retry-failed", async (req, res) => {
+  const doc = await findOwnedDocument(req.params.id, req.userId);
+  res.status(202).json({ queued: await retryFailedLessons(doc) });
 });
 
 documentRoutes.delete("/:id", async (req, res) => {

@@ -29,7 +29,21 @@ export const useDocuments = () =>
   });
 
 export const useDocument = (id: number) =>
-  useQuery({ queryKey: ["document", id], queryFn: () => get<DocumentDetail>(`/documents/${id}`), enabled: !!id });
+  useQuery({
+    queryKey: ["document", id],
+    queryFn: () => get<DocumentDetail>(`/documents/${id}`),
+    enabled: !!id,
+    // Đang soạn lại hàng loạt / có bài đang soạn → làm mới để biểu tượng từng bài đổi theo.
+    refetchInterval: (q) => (q.state.data && (q.state.data.retrying_failed || q.state.data.chapters.some((c) => c.analyzing)) ? 4000 : false),
+  });
+
+export function useRetryFailedLessons(id: number) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async () => (await http.post<{ queued: number }>(`/documents/${id}/lessons/retry-failed`)).data,
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["document", id] }),
+  });
+}
 
 export const useChapter = (id: number | null) =>
   useQuery({

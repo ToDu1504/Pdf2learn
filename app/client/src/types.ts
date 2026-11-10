@@ -59,7 +59,7 @@ export type RoadmapReport = {
   ai: boolean;
 };
 
-export type DocumentDetail = DocumentItem & { chapters: ChapterItem[]; sections: RoadmapSection[]; roadmap_report?: RoadmapReport | null };
+export type DocumentDetail = DocumentItem & { chapters: ChapterItem[]; sections: RoadmapSection[]; roadmap_report?: RoadmapReport | null; retrying_failed?: boolean };
 
 /** quote: câu trích nguyên văn từ sách; verified: máy đã tìm thấy câu trích trong text trang. */
 export type KeyPoint = { point: string; page: number; page_end?: number; quote?: string; verified?: boolean };
