@@ -10,7 +10,9 @@
  *  4. Đóng cửa sổ = thu xuống khay (soạn/dịch nền vẫn chạy). Thoát hẳn từ menu khay → tắt server và CẢ CÂY tiến trình
  *     con (Python, Chrome của engine dịch), không để sót.
  */
-const { app, BrowserWindow, Menu, Tray, nativeImage, shell, dialog, ipcMain, safeStorage } = require("electron");
+const { app, BrowserWindow, Menu, Tray, nativeImage, shell, dialog, ipcMain, safeStorage, net: electronNet } = require("electron");
+const { Readable, Transform } = require("node:stream");
+const { pipeline } = require("node:stream/promises");
 const { fork, execFileSync, spawn } = require("node:child_process");
 const crypto = require("node:crypto");
 const fs = require("node:fs");
@@ -410,6 +412,84 @@ ipcMain.handle("translator:install-file", async (_e, zipPath) => {
     sendProgress({ phase: "error", error: err.message });
     return { installed: false, error: err.message };
   }
+});
+
+/*
+ * Tải gói dịch từ GitHub Releases. File tải dở nằm ở cache/downloads và được tải tiếp (Range) ở lần bấm sau;
+ * mã sha256 lấy từ file .sha256 đăng cùng. Đổi nguồn khi chạy thử: PDF2LEARN_TRANSLATOR_URL=<url của file .zip>.
+ */
+const PACK_VERSION = "1.0.0";
+const PACK_URL =
+  process.env.PDF2LEARN_TRANSLATOR_URL ||
+  `https://github.com/ToDu1504/Pdf2learn/releases/download/translator-v${PACK_VERSION}/${PACK_NAME}-${PACK_VERSION}.zip`;
+const DOWNLOAD_DIR = path.join(DATA_DIR, "cache", "downloads");
+let downloadAbort = null;
+
+async function downloadTranslator() {
+  if (installing || downloadAbort) throw new Error("Đang cài gói dịch");
+  fs.mkdirSync(DOWNLOAD_DIR, { recursive: true });
+  const zip = path.join(DOWNLOAD_DIR, path.basename(new URL(PACK_URL).pathname));
+  const part = `${zip}.part`;
+  downloadAbort = new AbortController();
+  const { signal } = downloadAbort;
+  try {
+    sendProgress({ phase: "download", received: 0, total: 0 });
+    const shaRes = await electronNet.fetch(`${PACK_URL}.sha256`, { signal });
+    if (!shaRes.ok) throw new Error(`Không lấy được mã kiểm tra của gói dịch (HTTP ${shaRes.status})`);
+    fs.writeFileSync(`${zip}.sha256`, await shaRes.text());
+
+    if (fs.existsSync(zip)) fs.renameSync(zip, part); // bản tải trước (có thể hỏng): kiểm tra lại sau khi tải
+    let have = fs.existsSync(part) ? fs.statSync(part).size : 0;
+    const res = await electronNet.fetch(PACK_URL, { signal, headers: have ? { Range: `bytes=${have}-` } : {} });
+    if (res.status === 416) {
+      /* đã tải đủ */
+    } else if (!res.ok) throw new Error(`Không tải được gói dịch (HTTP ${res.status})`);
+    else {
+      if (res.status !== 206) have = 0; // server không hỗ trợ tải tiếp → tải lại từ đầu
+      const total = have + Number(res.headers.get("content-length") || 0);
+      let received = have;
+      let last = 0;
+      const counter = new Transform({
+        transform(chunk, _enc, cb) {
+          received += chunk.length;
+          if (Date.now() - last > 300) {
+            last = Date.now();
+            sendProgress({ phase: "download", received, total });
+          }
+          cb(null, chunk);
+        },
+      });
+      await pipeline(Readable.fromWeb(res.body), counter, fs.createWriteStream(part, { flags: have ? "a" : "w" }));
+    }
+    fs.renameSync(part, zip);
+    try {
+      return await installTranslatorFromZip(zip);
+    } catch (err) {
+      if (/sha256/.test(err.message)) fs.rmSync(zip, { force: true }); // hỏng → lần sau tải lại từ đầu
+      throw err;
+    }
+  } catch (err) {
+    if (signal.aborted) throw new Error("Đã dừng tải. Bấm tải lại để tải tiếp.");
+    if (/fetch failed|ERR_/i.test(err.message)) throw new Error(`Mất kết nối khi tải gói dịch. Bấm tải lại để tải tiếp. (${err.message})`);
+    throw err;
+  } finally {
+    downloadAbort = null;
+  }
+}
+
+ipcMain.handle("translator:download", async () => {
+  try {
+    const pack = await downloadTranslator();
+    // Đã cài xong: bỏ file zip cho nhẹ ổ.
+    fs.rmSync(DOWNLOAD_DIR, { recursive: true, force: true });
+    return { installed: true, pack };
+  } catch (err) {
+    sendProgress({ phase: "error", error: err.message });
+    return { installed: false, error: err.message };
+  }
+});
+ipcMain.handle("translator:cancel", () => {
+  downloadAbort?.abort();
 });
 
 ipcMain.handle("translator:remove", async () => {

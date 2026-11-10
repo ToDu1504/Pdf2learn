@@ -14,6 +14,19 @@ Biến giáo trình PDF thành một lộ trình học: chia chương và bài t
 - **Bản dịch tiếng Việt giữ bố cục.** Xem bản dịch theo từng cụm 10 trang, hoặc dịch toàn bộ PDF ở nền rồi tải về một file. Dịch bằng Google Dịch trên trình duyệt nên không tốn lượt AI, nhờ [VI-Translate](https://github.com/breslee1707/VI-Translate).
 - **Vòng học hằng ngày.** Khối "Hôm nay" gồm bài học tiếp theo và số thẻ đến hạn ôn; trang thống kê điểm số và chủ đề yếu.
 
+## Ứng dụng desktop cho Windows
+
+Thư mục [app/](app/) là bản ứng dụng desktop: cài bằng một file `.exe`, không cần MySQL, không đăng nhập, dữ liệu là một file SQLite trong thư mục bạn chọn (mặc định `<thư mục cài>\data`, ổ D). Lần đầu mở, app hỏi nơi lưu dữ liệu và Gemini API key (key được mã hóa trên máy). Gói dịch PDF giữ bố cục (~365MB) tải trong **Cài đặt → Gói dịch**; tải dở thì bấm lại để tải tiếp.
+
+```bash
+cd app
+npm install
+npm run dev     # chạy thử app khi phát triển
+npm run dist    # tạo dist/installer/Pdf2Learn-Setup-<phiên bản>.exe
+```
+
+Gỡ cài đặt không xóa thư mục `data`. Chi tiết kỹ thuật và tiến độ ở [app/KE-HOACH.md](app/KE-HOACH.md). Phần dưới đây là bản web.
+
 ## Yêu cầu
 
 - Node.js 20 trở lên

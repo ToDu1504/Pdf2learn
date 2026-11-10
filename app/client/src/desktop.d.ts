@@ -6,8 +6,12 @@ interface Pdf2LearnBridge {
   chooseDataDir(): Promise<{ changed: boolean }>;
   openExternal(url: string): Promise<void>;
   installTranslator(zipPath?: string): Promise<{ installed: boolean; error?: string; pack?: { version: string } }>;
+  downloadTranslator(): Promise<{ installed: boolean; error?: string; pack?: { version: string } }>;
+  cancelTranslatorDownload(): Promise<void>;
   removeTranslator(): Promise<{ removed: boolean; error?: string }>;
-  onTranslatorProgress(cb: (p: { phase: "verify" | "extract" | "finish" | "done" | "error"; files?: number; error?: string }) => void): () => void;
+  onTranslatorProgress(
+    cb: (p: { phase: "download" | "verify" | "extract" | "finish" | "done" | "error"; files?: number; received?: number; total?: number; error?: string }) => void,
+  ): () => void;
 }
 interface Window {
   pdf2learn?: Pdf2LearnBridge;

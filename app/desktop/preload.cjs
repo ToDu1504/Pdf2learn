@@ -14,6 +14,10 @@ contextBridge.exposeInMainWorld("pdf2learn", {
   chooseDataDir: () => ipcRenderer.invoke("data-dir:choose"),
   /** Cài gói dịch từ file .zip (không truyền đường dẫn → hộp thoại chọn file). */
   installTranslator: (zipPath) => ipcRenderer.invoke("translator:install-file", zipPath),
+  /** Tải gói dịch từ GitHub Releases rồi cài (tải tiếp nếu lần trước bị ngắt). */
+  downloadTranslator: () => ipcRenderer.invoke("translator:download"),
+  /** Dừng tải gói dịch. */
+  cancelTranslatorDownload: () => ipcRenderer.invoke("translator:cancel"),
   /** Gỡ gói dịch. */
   removeTranslator: () => ipcRenderer.invoke("translator:remove"),
   /** Theo dõi tiến độ cài gói dịch; trả về hàm hủy theo dõi. */

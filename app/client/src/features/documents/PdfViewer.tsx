@@ -3,6 +3,7 @@ import { Document, Page, pdfjs } from "react-pdf";
 import "react-pdf/dist/Page/AnnotationLayer.css";
 import "react-pdf/dist/Page/TextLayer.css";
 import { useQuery } from "@tanstack/react-query";
+import { Link } from "react-router-dom";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { ChevronLeft, ChevronRight, Maximize2, Minimize2, RotateCw, X, ZoomIn, ZoomOut } from "lucide-react";
@@ -143,6 +144,15 @@ function TranslationView({ documentId, range }: { documentId: number; range: Pag
 
   return (
     <div className="space-y-8 px-6 py-6 sm:px-8">
+      {window.pdf2learn && (
+        <p className="rounded-xl bg-slate-50 px-4 py-3 text-[13px] text-slate-500 dark:bg-slate-900">
+          Đây là bản dịch chữ bằng Gemini. Muốn bản dịch giữ nguyên hình, bảng và bố cục của PDF (không tốn lượt AI), hãy{" "}
+          <Link to="/app/settings" className="font-medium text-brand-600 hover:underline">
+            tải gói dịch trong Cài đặt
+          </Link>
+          .
+        </p>
+      )}
       {q.data?.pages.map((p) => (
         <section key={p.page}>
           <p className="eyebrow mb-2 flex items-center gap-2">

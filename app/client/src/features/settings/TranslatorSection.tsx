@@ -1,22 +1,34 @@
 import { useEffect, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { FileArchive, Trash2 } from "lucide-react";
+import { Download, FileArchive, Square, Trash2 } from "lucide-react";
 import { useAppConfig } from "../../api/queries";
 import { Button, ProgressBar, Spinner } from "../../components/ui";
 import { ask } from "../../stores/confirm";
 import { toast } from "../../stores/toast";
 
-const PHASE = { verify: "Đang kiểm tra file", extract: "Đang giải nén", finish: "Đang hoàn tất", done: "Xong", error: "Lỗi" } as const;
+const PHASE = { download: "Đang tải", verify: "Đang kiểm tra file", extract: "Đang giải nén", finish: "Đang hoàn tất", done: "Xong", error: "Lỗi" } as const;
 const TOTAL_FILES = 28_500; // gói 1.0.0: ~28.5 nghìn file (chỉ để ước lượng thanh tiến độ)
+
+type Progress = { phase: keyof typeof PHASE; files?: number; received?: number; total?: number; error?: string };
+const mb = (b = 0) => `${Math.round(b / 1048576).toLocaleString("vi-VN")}MB`;
+
+/** Thanh tiến độ chung: tải chiếm 0–60%, giải nén 60–99%. */
+function percent(p: Progress) {
+  if (p.phase === "download") return p.total ? ((p.received ?? 0) / p.total) * 60 : 1;
+  if (p.phase === "verify") return 60;
+  if (p.phase === "extract") return 60 + Math.min(38, ((p.files ?? 0) / TOTAL_FILES) * 38);
+  return 99;
+}
 
 /**
  * Gói dịch (VI-Translate + Python độc lập, ~365MB nén / ~770MB khi cài) để dịch PDF giữ nguyên bố cục.
- * Cài từ file .zip; nằm trong thư mục dữ liệu. Không có gói thì tab Bản dịch dùng Gemini dịch chữ.
+ * Tải từ GitHub Releases (tải tiếp được khi bị ngắt) hoặc cài từ file .zip; nằm trong thư mục dữ liệu.
+ * Không có gói thì tab Bản dịch dùng Gemini dịch chữ.
  */
 export function TranslatorSection() {
   const qc = useQueryClient();
   const { data } = useAppConfig();
-  const [progress, setProgress] = useState<{ phase: keyof typeof PHASE; files?: number; error?: string } | null>(null);
+  const [progress, setProgress] = useState<Progress | null>(null);
   const bridge = window.pdf2learn;
   useEffect(() => bridge?.onTranslatorProgress((p) => setProgress(p)), [bridge]);
 
@@ -24,9 +36,8 @@ export function TranslatorSection() {
   const busy = !!progress && progress.phase !== "done" && progress.phase !== "error";
   const refresh = () => qc.invalidateQueries({ queryKey: ["app-config"] });
 
-  const install = async () => {
-    if (!bridge) return;
-    const r = await bridge.installTranslator();
+  const run = async (action: () => Promise<{ installed: boolean; error?: string }>) => {
+    const r = await action();
     if (r.installed) {
       toast.success("Đã cài gói dịch");
       await refresh();
@@ -53,22 +64,33 @@ export function TranslatorSection() {
         </p>
       ) : (
         <p className="text-slate-600 dark:text-slate-300">
-          Chưa cài. Cần gói dịch (~365MB) để xem bản dịch tiếng Việt giữ nguyên hình, bảng, bố cục của PDF. Chưa có gói thì tab Bản dịch chỉ dịch chữ bằng Gemini.
+          Chưa cài. Cần gói dịch (tải ~365MB, một lần) để xem bản dịch tiếng Việt giữ nguyên hình, bảng, bố cục của PDF. Chưa có gói thì tab Bản dịch chỉ dịch chữ bằng
+          Gemini.
         </p>
       )}
       {busy && (
         <div>
           <p className="mb-1.5 flex items-center gap-2 text-slate-500">
             <Spinner className="size-3.5" /> {PHASE[progress!.phase]}
+            {progress!.phase === "download" && progress!.total ? ` · ${mb(progress!.received)} / ${mb(progress!.total)}` : ""}
             {progress!.phase === "extract" && progress!.files ? ` · ${progress!.files.toLocaleString("vi-VN")} file` : ""}
           </p>
-          <ProgressBar value={progress!.phase === "extract" ? Math.min(98, ((progress!.files ?? 0) / TOTAL_FILES) * 100) : progress!.phase === "finish" ? 99 : 2} />
+          <ProgressBar value={percent(progress!)} />
         </div>
       )}
       {bridge ? (
         <div className="flex flex-wrap gap-2">
-          <Button size="sm" variant={t?.installed ? "secondary" : "primary"} onClick={install} disabled={busy}>
-            <FileArchive /> {t?.installed ? "Cài lại / cập nhật từ file .zip…" : "Cài từ file .zip…"}
+          {busy && progress!.phase === "download" ? (
+            <Button size="sm" variant="secondary" onClick={() => bridge.cancelTranslatorDownload()}>
+              <Square /> Dừng tải
+            </Button>
+          ) : (
+            <Button size="sm" variant={t?.installed ? "secondary" : "primary"} onClick={() => run(() => bridge.downloadTranslator())} disabled={busy}>
+              <Download /> {t?.installed ? "Tải lại / cập nhật" : "Tải gói dịch"}
+            </Button>
+          )}
+          <Button size="sm" variant="secondary" onClick={() => run(() => bridge.installTranslator())} disabled={busy}>
+            <FileArchive /> Cài từ file .zip…
           </Button>
           {t?.installed && t.source === "pack" && (
             <Button size="sm" variant="secondary" onClick={remove} disabled={busy}>
