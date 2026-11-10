@@ -356,9 +356,13 @@ export class DocumentPage extends Model<InferAttributes<DocumentPage>, InferCrea
   declare document_id: number;
   declare page: number;
   declare text: string;
+  /** Hình minh họa trên trang (services/figures.service.ts); null = chưa tính. */
+  declare figures: CreationOptional<PageFigure[] | null>;
 }
+/** Vị trí theo tỉ lệ trang (0–1, gốc ở góc trên trái); ar = cao/rộng của trang. */
+export type PageFigure = { x: number; y: number; w: number; h: number; ar: number; caption: string | null };
 DocumentPage.init(
-  { id: pk, document_id: int(), page: int(), text: { type: DataTypes.TEXT("medium"), allowNull: false } },
+  { id: pk, document_id: int(), page: int(), text: { type: DataTypes.TEXT("medium"), allowNull: false }, figures: json("figures", true) },
   { sequelize, tableName: "document_pages" },
 );
 

@@ -15,6 +15,10 @@ export type DocumentItem = {
   created_at: string;
   chapter_count?: number;
   completed_count?: number;
+  /** Số bài đã soạn xong (bài giảng, tóm tắt, câu hỏi), kể cả soạn trước ở nền. */
+  prepared_count?: number;
+  /** Dịch toàn bộ PDF (cụm 10 trang); null khi chưa cài gói dịch. */
+  translation?: { ready: number; total: number; running: boolean; complete: boolean; error: string | null } | null;
 };
 
 export type ChapterItem = {

@@ -1,25 +1,19 @@
 import { useEffect, useId, useRef, useState } from "react";
-import { useQueryClient } from "@tanstack/react-query";
-import { errorMessage, http } from "../../api/client";
-import { Button, Empty, Spinner } from "../../components/ui";
-import { toast } from "../../stores/toast";
+import { Empty, Spinner } from "../../components/ui";
 import type { Summary } from "../../types";
 import { matchNode, type SummaryTarget } from "./matchNode";
-import { Network, RotateCw } from "lucide-react";
+import { Network } from "lucide-react";
 
+/** Sơ đồ tư duy server dựng bằng code (services/mindmap.ts), không gọi AI. */
 export function Mindmap({
-  chapterId,
   code,
   summary,
   onSelect,
 }: {
-  chapterId: number;
   code: string | null;
   summary: Pick<Summary, "key_points" | "key_terms">;
   onSelect: (target: SummaryTarget) => void;
 }) {
-  const qc = useQueryClient();
-  const [loading, setLoading] = useState(false);
   const [svg, setSvg] = useState<string | null>(null);
   const [renderError, setRenderError] = useState(false);
   const id = "mm" + useId().replace(/[^a-zA-Z0-9]/g, "");
@@ -80,40 +74,20 @@ export function Mindmap({
     };
   }, [code, id]);
 
-  const generate = async (force = false) => {
-    setLoading(true);
-    try {
-      await http.post(`/chapters/${chapterId}/mindmap${force ? "?force=1" : ""}`);
-      await qc.invalidateQueries({ queryKey: ["chapter", chapterId] });
-    } catch (err) {
-      toast.error(errorMessage(err));
-    } finally {
-      setLoading(false);
-    }
-  };
-
   if (!code)
     return (
       <Empty icon={<Network />} title="Chưa có sơ đồ tư duy">
-        <p className="mb-3">AI sẽ vẽ sơ đồ từ bản tóm tắt chương.</p>
-        <Button onClick={() => generate()} loading={loading}>
-          Tạo sơ đồ
-        </Button>
+        <p>Sơ đồ có ngay khi bài có ý chính đã kiểm chứng với sách.</p>
       </Empty>
     );
 
   return (
     <div>
-      <div className="mb-2 flex items-center justify-between gap-2">
-        <p className="text-xs text-slate-500">Bấm vào một nhánh để xem phần lý thuyết tương ứng</p>
-        <Button size="sm" variant="ghost" onClick={() => generate(true)} loading={loading}>
-          <RotateCw /> Tạo lại
-        </Button>
-      </div>
+      <p className="mb-2 text-xs text-slate-500">
+        Nhánh theo mục lục của sách, chỉ gồm ý đã đối chiếu với PDF. Bấm vào một nút để xem phần lý thuyết tương ứng.
+      </p>
       {renderError ? (
-        <div className="rounded-xl bg-amber-50 p-4 text-sm text-amber-800 dark:bg-amber-500/10 dark:text-amber-200">
-          Sơ đồ AI tạo bị lỗi cú pháp. Bấm “Tạo lại”.
-        </div>
+        <div className="rounded-xl bg-amber-50 p-4 text-sm text-amber-800 dark:bg-amber-500/10 dark:text-amber-200">Không vẽ được sơ đồ cho bài này.</div>
       ) : svg ? (
         <div ref={box} className="overflow-auto rounded-xl bg-white p-2 dark:bg-slate-950 [&_svg]:mx-auto [&_svg]:h-auto [&_svg]:max-w-full" dangerouslySetInnerHTML={{ __html: svg }} />
       ) : (

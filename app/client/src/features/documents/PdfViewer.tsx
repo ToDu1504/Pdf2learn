@@ -10,7 +10,9 @@ import { ChevronLeft, ChevronRight, Maximize2, Minimize2, RotateCw, X, ZoomIn, Z
 import { authHeader, errorMessage, http } from "../../api/client";
 import { Button, IconButton, Spinner, Tabs } from "../../components/ui";
 
-pdfjs.GlobalWorkerOptions.workerSrc = new URL("pdfjs-dist/build/pdf.worker.min.mjs", import.meta.url).toString();
+// Bản "legacy" của worker: có polyfill cho Chromium 138 của Electron 37 (bản thường gọi Map.getOrInsertComputed
+// khi tải PDF theo đoạn → lỗi văng ra làm trắng cả giao diện).
+pdfjs.GlobalWorkerOptions.workerSrc = new URL("pdfjs-dist/legacy/build/pdf.worker.min.mjs", import.meta.url).toString();
 
 /** Khoảng trang đang xem: 1 trang (from = to) hoặc nhiều trang khi nội dung trích dẫn trải dài. */
 /** quote: câu gốc cần tô sáng trong trang (dẫn chứng đã đối chiếu với sách). */

@@ -14,6 +14,7 @@ import { FullTranslation } from "../features/documents/FullTranslation";
 import { QuizSetup } from "../features/quiz/QuizSetup";
 import { RoadmapView, StateIcon, groupLessons, lessonState } from "../features/roadmap/RoadmapView";
 import { LessonBody } from "../features/roadmap/LessonBody";
+import { useChapterFigures } from "../features/roadmap/BookFigure";
 import { QuickCheck } from "../features/roadmap/QuickCheck";
 import { GroundingPanel } from "../features/roadmap/GroundingPanel";
 import { stepLabel, useDocumentProgress } from "../hooks/useDocumentProgress";
@@ -40,6 +41,7 @@ export function DocumentPage() {
   // Không có ?chapter → xem roadmap; có → xem bài học.
   const lessonId = Number(params.get("chapter")) || null;
   const chapter = useChapter(lessonId);
+  const figures = useChapterFigures(chapter.data?.summary?.lesson_md ? lessonId : null);
 
   const [tab, setTab] = useState<Tab>("lesson");
   const [focus, setFocus] = useState<SummaryFocus | null>(null);
@@ -327,7 +329,13 @@ export function DocumentPage() {
                     )
                   ) : tab === "lesson" && chapter.data.summary.lesson_md ? (
                     <>
-                      <LessonBody markdown={chapter.data.summary.lesson_md} onPage={setPdfPage} evidence={chapter.data.summary.evidence} />
+                      <LessonBody
+                        markdown={chapter.data.summary.lesson_md}
+                        onPage={setPdfPage}
+                        evidence={chapter.data.summary.evidence}
+                        documentId={id}
+                        figures={figures.data}
+                      />
                       <QuickCheck lesson={chapter.data} documentId={id} onNext={next ? () => openLesson(next.id) : undefined} />
                     </>
                   ) : tab === "summary" || tab === "lesson" ? (
@@ -337,7 +345,6 @@ export function DocumentPage() {
                     </>
                   ) : tab === "mindmap" ? (
                     <Mindmap
-                      chapterId={chapter.data.id}
                       code={chapter.data.summary.mindmap_mermaid}
                       summary={chapter.data.summary}
                       onSelect={(target) => {

@@ -1,12 +1,16 @@
 import { SequelizeStorage, Umzug } from "umzug";
 import { configureSqlite, sequelize } from "../config/db.js";
 import * as baseline from "./migrations/0001-baseline.js";
+import * as pageFigures from "./migrations/0002-page-figures.js";
 
 /**
  * Migration chạy ngay khi app khởi động (app desktop không có sequelize-cli). Thêm migration mới: tạo file
  * migrations/000N-ten.ts (export up/down) rồi khai báo vào danh sách dưới đây, theo thứ tự.
  */
-const migrations = [{ name: "0001-baseline", ...baseline }];
+const migrations = [
+  { name: "0001-baseline", ...baseline },
+  { name: "0002-page-figures", ...pageFigures },
+];
 
 export async function migrate() {
   await configureSqlite();

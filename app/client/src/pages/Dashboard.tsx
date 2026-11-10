@@ -1,6 +1,6 @@
 import { Link, useNavigate } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
-import { ArrowRight, BookOpen, ChevronRight, FileText, Inbox, Layers, ListChecks, Trash2 } from "lucide-react";
+import { ArrowRight, BookOpen, ChevronRight, CircleCheck, FileText, Inbox, Languages, Layers, ListChecks, PenLine, Trash2 } from "lucide-react";
 import { useDocuments, useOverview, useQuizHistory } from "../api/queries";
 import { Page } from "../components/Layout";
 import { Badge, Button, Empty, IconButton, ProgressBar, Skeleton } from "../components/ui";
@@ -18,7 +18,41 @@ export const STATUS: Record<DocumentItem["status"], { label: string; color: "sla
   failed: { label: "Lỗi", color: "red" },
 };
 
-const fmtDate = (s: string) => new Date(s).toLocaleDateString("vi-VN", { day: "2-digit", month: "2-digit", year: "numeric" });
+/**
+ * Tiến độ làm nền của 1 tài liệu (soạn bài trước, dịch toàn bộ PDF): một dòng nhỏ, chỉ dấu tích có màu khi đã xong.
+ */
+function BackgroundStatus({ d }: { d: DocumentItem }) {
+  if (d.status !== "done" || !d.chapter_count) return null;
+  const prepared = d.prepared_count ?? 0;
+  const t = d.translation;
+  const done = <CircleCheck className="size-3.5 text-emerald-600 dark:text-emerald-400" strokeWidth={2} />;
+  return (
+    <p className="mt-1.5 flex flex-wrap items-center gap-x-4 gap-y-1 text-[12px] text-slate-500">
+      {prepared >= d.chapter_count ? (
+        <span className="inline-flex items-center gap-1" title="Mọi bài đã có bài giảng, tóm tắt, câu hỏi và flashcard">
+          {done} Đã soạn đủ bài
+        </span>
+      ) : (
+        <span className="inline-flex items-center gap-1" title="Các bài còn lại đang được soạn trước ở nền">
+          <PenLine className="size-3.5" strokeWidth={1.75} /> Đã soạn {prepared}/{d.chapter_count} bài
+        </span>
+      )}
+      {t &&
+        (t.complete ? (
+          <span className="inline-flex items-center gap-1" title="Đã dịch toàn bộ PDF sang tiếng Việt">
+            {done} Đã dịch xong
+          </span>
+        ) : (
+          <span className="inline-flex items-center gap-1" title={t.error ? `Dịch tạm dừng: ${t.error}` : t.running ? "Đang dịch ở nền" : "Chưa dịch hết"}>
+            <Languages className={`size-3.5 ${t.error ? "text-amber-600 dark:text-amber-400" : ""}`} strokeWidth={1.75} />
+            {t.running ? "Đang dịch" : t.error ? "Dịch tạm dừng" : "Đã dịch"} {Math.round((t.ready / Math.max(1, t.total)) * 100)}%
+          </span>
+        ))}
+    </p>
+  );
+}
+
+const fmtDate =(s: string) => new Date(s).toLocaleDateString("vi-VN", { day: "2-digit", month: "2-digit", year: "numeric" });
 
 /** "Hôm nay": học tiếp bài kế tiếp + ôn thẻ đến hạn — vòng học chính của app. */
 function Today() {
@@ -139,6 +173,7 @@ export function Dashboard() {
                         {d.page_count ? `${d.page_count} trang · ` : ""}
                         {fmtDate(d.created_at)}
                       </p>
+                      <BackgroundStatus d={d} />
                       {d.status === "done" && !!d.chapter_count && <ProgressBar value={((d.completed_count ?? 0) / d.chapter_count) * 100} className="mt-2 h-1 max-w-xs" />}
                       {(d.status === "processing" || d.status === "queued") && (
                         <div className="mt-2 max-w-xs">

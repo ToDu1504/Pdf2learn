@@ -2,6 +2,7 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { BadgeCheck } from "lucide-react";
 import type { Evidence } from "../../types";
+import { BookFigure, type Figure } from "./BookFigure";
 
 /**
  * Bài giảng markdown. Dẫn nguồn:
@@ -9,17 +10,63 @@ import type { Evidence } from "../../types";
  *  - "(tr. N)" / "(tr. N–M)": mở trang (bài soạn trước khi có kiểm chứng, hoặc PDF scan);
  *  - "(chưa kiểm chứng)": câu trích AI đưa ra không tìm thấy trong sách.
  */
+const CITE = /\((?:tr|trang)\.?\s*(\d+)(?:\s*[-–]\s*(\d+))?/gi;
+const FIG_MARK = /^%%FIG(\d+)%%$/;
+
+/**
+ * Đặt hình của sách ngay sau đoạn ĐẦU TIÊN của bài dẫn tới trang có hình ("(tr. N)"), như giáo viên vừa giảng vừa
+ * chỉ vào hình. Hình không có đoạn nào nhắc tới trang của nó → trả về để hiện ở cuối bài.
+ */
+export function placeFigures(markdown: string, figures: Figure[]) {
+  const blocks: string[] = [];
+  let cur: string[] = [];
+  let fence = false;
+  for (const line of markdown.split("\n")) {
+    if (/^\s*(```|~~~)/.test(line)) fence = !fence;
+    if (!fence && !line.trim()) {
+      if (cur.length) blocks.push(cur.join("\n"));
+      cur = [];
+    } else cur.push(line);
+  }
+  if (cur.length) blocks.push(cur.join("\n"));
+
+  const placed = new Set<number>();
+  const out: string[] = [];
+  for (const block of blocks) {
+    out.push(block);
+    const pages = new Set<number>();
+    for (const m of block.matchAll(CITE)) {
+      const a = Number(m[1]);
+      const b = m[2] && Number(m[2]) > a ? Math.min(Number(m[2]), a + 6) : a;
+      for (let p = a; p <= b; p++) pages.add(p);
+    }
+    figures.forEach((f, i) => {
+      if (!placed.has(i) && pages.has(f.page)) {
+        placed.add(i);
+        out.push(`%%FIG${i}%%`);
+      }
+    });
+  }
+  return { markdown: out.join("\n\n"), rest: figures.filter((_, i) => !placed.has(i)) };
+}
+
 export function LessonBody({
   markdown,
   onPage,
   evidence,
+  documentId,
+  figures,
 }: {
   markdown: string;
   onPage: (from: number, to?: number, quote?: string) => void;
   evidence?: Evidence[] | null;
+  documentId?: number;
+  figures?: Figure[];
 }) {
   const byK = new Map((evidence ?? []).map((e) => [e.k, e]));
-  const linked = markdown
+  const figs = documentId && figures?.length ? figures : [];
+  const placedFigs = placeFigures(markdown, figs);
+  const linked = placedFigs.markdown
     .replace(/\((?:tr|trang)\.?\s*(\d+)(?:\s*[-–]\s*(\d+))?(?:\s*#(\d+))?\)/gi, (_m, a: string, b?: string, k?: string) =>
       k ? `[tr. ${a}](#ev-${k})` : b && Number(b) > Number(a) ? `[tr. ${a}–${b}](#page-${a}-${b})` : `[tr. ${a}](#page-${a})`,
     )
@@ -29,7 +76,12 @@ export function LessonBody({
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
         components={{
-          a: ({ href, children }) => {
+          p: ({ children }) => {
+            const m = typeof children === "string" ? FIG_MARK.exec(children.trim()) : null;
+            const fig = m && figs[Number(m[1])];
+            return fig ? <BookFigure documentId={documentId!} fig={fig} onPage={(p) => onPage(p)} /> : <p>{children}</p>;
+          },
+          a:({ href, children }) => {
             const ev = /^#ev-(\d+)$/.exec(href ?? "");
             const e = ev && byK.get(Number(ev[1]));
             if (e)
@@ -73,6 +125,14 @@ export function LessonBody({
       >
         {linked}
       </ReactMarkdown>
+      {placedFigs.rest.length > 0 && (
+        <section>
+          <h2>Hình khác trong bài</h2>
+          {placedFigs.rest.map((f) => (
+            <BookFigure key={`${f.page}-${f.index}`} documentId={documentId!} fig={f} onPage={(p) => onPage(p)} />
+          ))}
+        </section>
+      )}
     </article>
   );
 }

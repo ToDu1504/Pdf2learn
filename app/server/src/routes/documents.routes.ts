@@ -50,13 +50,33 @@ documentRoutes.post("/", uploadPdf, async (req, res) => {
 documentRoutes.get("/", async (req, res) => {
   const docs = await Document.findAll({ where: { user_id: req.userId }, order: [["created_at", "DESC"]], attributes: { exclude: ["roadmap_report"] } });
   const counts = (await Chapter.findAll({
-    attributes: ["document_id", [sequelize.fn("COUNT", sequelize.col("id")), "n"], [sequelize.fn("COUNT", sequelize.col("completed_at")), "completed"]],
+    attributes: [
+      "document_id",
+      [sequelize.fn("COUNT", sequelize.col("id")), "n"],
+      [sequelize.fn("COUNT", sequelize.col("completed_at")), "completed"],
+      [sequelize.literal("SUM(CASE WHEN status = 'done' THEN 1 ELSE 0 END)"), "prepared"],
+    ],
     where: { document_id: docs.map((d) => d.id) },
     group: ["document_id"],
     raw: true,
-  })) as unknown as { document_id: number; n: number; completed: number }[];
-  const byDoc = new Map(counts.map((c) => [c.document_id, { n: Number(c.n), completed: Number(c.completed) }]));
-  res.json(docs.map((d) => ({ ...d.toJSON(), chapter_count: byDoc.get(d.id)?.n ?? 0, completed_count: byDoc.get(d.id)?.completed ?? 0, file_hash: undefined })));
+  })) as unknown as { document_id: number; n: number; completed: number; prepared: number }[];
+  const byDoc = new Map(counts.map((c) => [c.document_id, { n: Number(c.n), completed: Number(c.completed), prepared: Number(c.prepared) }]));
+  const translator = isPdfTranslatorInstalled();
+  res.json(
+    docs.map((d) => {
+      const c = byDoc.get(d.id);
+      // Tiến độ làm nền: số bài đã soạn, số cụm trang đã dịch (chỉ khi có gói dịch).
+      const t = translator && d.status === "done" ? fullStatus(d) : null;
+      return {
+        ...d.toJSON(),
+        chapter_count: c?.n ?? 0,
+        completed_count: c?.completed ?? 0,
+        prepared_count: c?.prepared ?? 0,
+        translation: t && { ready: t.ready, total: t.total, running: t.running, complete: t.complete, error: t.error },
+        file_hash: undefined,
+      };
+    }),
+  );
 });
 
 documentRoutes.get("/:id", async (req, res) => {

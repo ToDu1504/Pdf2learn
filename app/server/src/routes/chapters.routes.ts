@@ -6,7 +6,9 @@ import { HttpError } from "../utils/HttpError.js";
 import { findOwnedChapter } from "../services/access.js";
 import { chapterSource } from "../services/ai/source.js";
 import { analyzeError, analyzeFrom, isAnalyzing, reanalyzeChapter, supplementChapter } from "../services/chapterAnalysis.service.js";
-import { generateMindmap, generateQuestions } from "../services/ai/content.service.js";
+import { generateQuestions } from "../services/ai/content.service.js";
+import { buildMindmap } from "../services/mindmap.js";
+import { chapterFigures } from "../services/figures.service.js";
 
 export const chapterRoutes = Router();
 chapterRoutes.use(auth);
@@ -19,11 +21,27 @@ chapterRoutes.get("/:id", async (req, res) => {
     ...chapter.toJSON(),
     gemini_file_uri: undefined,
     document: { id: doc.id, title: doc.title, page_count: doc.page_count },
-    summary,
+    // Sơ đồ dựng bằng code từ mục lục + nội dung đã kiểm chứng (không gọi AI, luôn khớp bài hiện tại).
+    summary: summary && {
+      ...summary.toJSON(),
+      mindmap_mermaid: buildMindmap({
+        title: chapter.title,
+        subtopics: chapter.subtopics,
+        key_points: summary.key_points,
+        key_terms: summary.key_terms,
+        unverifiable: summary.grounding?.mode === "file",
+      }),
+    },
     questions,
     analyzing: isAnalyzing(chapter.id),
     analyze_error: summary ? null : analyzeError(chapter.id),
   });
+});
+
+/** Hình minh họa trong các trang của bài (tìm bằng code lần đầu mở bài, lưu lại). */
+chapterRoutes.get("/:id/figures", async (req, res) => {
+  const { chapter, doc } = await findOwnedChapter(req.params.id, req.userId);
+  res.json(await chapterFigures(doc, chapter));
 });
 
 /** Đổi tên bài học. */
@@ -70,26 +88,6 @@ chapterRoutes.post("/:id/questions/generate", async (req, res) => {
     difficulty: body.difficulty,
   });
   res.status(201).json(created);
-});
-
-chapterRoutes.post("/:id/mindmap", async (req, res) => {
-  const { chapter } = await findOwnedChapter(req.params.id, req.userId);
-  const summary = await Summary.findOne({ where: { chapter_id: chapter.id } });
-  if (!summary) throw new HttpError(409, "Chương chưa có tóm tắt");
-  const force = req.query.force === "1";
-  if (!summary.mindmap_mermaid || force) {
-    const mermaid = await generateMindmap(
-      chapter.title,
-      {
-        overview: summary.overview,
-        key_points: summary.key_points.map(({ point, page }) => ({ point, page })),
-        key_terms: summary.key_terms.map(({ term, definition, page }) => ({ term, definition, page })),
-      },
-      req.userId,
-    );
-    await summary.update({ mindmap_mermaid: mermaid });
-  }
-  res.json({ mermaid: summary.mindmap_mermaid });
 });
 
 /** Soạn lại bài theo quy tắc kiểm chứng với sách (xóa bài giảng + câu hỏi cũ). Client poll GET /chapters/:id. */

@@ -18,6 +18,9 @@ Cập nhật sau mỗi giai đoạn. Chi tiết từng giai đoạn ở mục 11
 
 **Ghi chú phát sinh**
 
+- (11/11) Sau khi dùng thử: **sơ đồ tư duy dựng bằng code** (`services/mindmap.ts`, 0 lượt AI): nhánh = mục con của bài theo mục lục sách, lá = ý/thuật ngữ đã kiểm chứng; bỏ lệnh gọi Gemini vẽ sơ đồ. **Hình minh họa của sách** (`services/figures.service.ts`, migration `0002-page-figures`): tìm ảnh trên trang bằng danh sách lệnh vẽ của pdfjs + chú thích "FIGURE 2.30 …", lưu `document_pages.figures` khi mở bài lần đầu; bài giảng đặt hình ngay sau đoạn đầu tiên dẫn tới trang đó (`LessonBody.placeFigures`). Sách CompTIA: 328 hình, 323 có chú thích, 11 giây cả cuốn. Chưa nhận được hình vẽ bằng nét vector. **Trang chủ**: mỗi tài liệu có dòng "Đã soạn đủ bài / Đã soạn x/y" và "Đã dịch xong / Đang dịch n%".
+- (11/11) Sửa lỗi: mở PDF gốc trong app làm trắng cả giao diện (pdf.js 6 cần `Map.getOrInsertComputed`, Chromium 138 của Electron 37 chưa có). Dùng worker `pdfjs-dist/legacy` + polyfill `client/src/polyfills.ts`.
+
 - Gemini key nằm trong `app/data/config.json` dạng mã hóa (chỉ giải mã được trên tài khoản Windows này). Không còn `app/server/.env`.
 - Dữ liệu đã chuyển nằm ở `app/data/` (gitignored). Chạy lại script với `--replace` sẽ xóa dữ liệu app và chép lại từ MySQL.
 - Chạy app desktop khi phát triển: `cd app && npm run dev` (build giao diện rồi mở Electron) hoặc `npm start` (không build lại). Terminal của VS Code đặt sẵn `ELECTRON_RUN_AS_NODE=1` nên phải chạy qua `desktop/run.cjs` (script `start`/`dev` đã làm), không gọi thẳng `electron .`.

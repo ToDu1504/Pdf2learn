@@ -19,8 +19,13 @@ export const useDocuments = () =>
   useQuery({
     queryKey: ["documents"],
     queryFn: () => get<DocumentItem[]>("/documents"),
-    // Có tài liệu đang xử lý thì tự làm mới danh sách.
-    refetchInterval: (q) => (q.state.data?.some((d) => d.status === "queued" || d.status === "processing") ? 4000 : false),
+    // Có tài liệu đang xử lý thì tự làm mới nhanh; đang soạn/dịch ở nền thì làm mới chậm để cập nhật biểu tượng tiến độ.
+    refetchInterval: (q) => {
+      const docs = q.state.data ?? [];
+      if (docs.some((d) => d.status === "queued" || d.status === "processing")) return 4000;
+      const background = docs.some((d) => d.status === "done" && ((d.prepared_count ?? 0) < (d.chapter_count ?? 0) || d.translation?.running));
+      return background ? 30_000 : false;
+    },
   });
 
 export const useDocument = (id: number) =>

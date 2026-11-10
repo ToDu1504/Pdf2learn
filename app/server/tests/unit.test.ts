@@ -379,3 +379,79 @@ describe("phần ôn tập của sách (đọc bằng code)", () => {
     ]);
   });
 });
+
+import { buildMindmap, shortLabel } from "../src/services/mindmap.js";
+
+describe("sơ đồ tư duy dựng bằng code", () => {
+  const subtopics = [
+    { title: "Network Topologies", from: 10, to: 12 },
+    { title: "Cabling (Copper)", from: 13, to: 15 },
+  ];
+  it("nhánh theo mục con của sách, chỉ lấy ý đã kiểm chứng", () => {
+    const mm = buildMindmap({
+      title: "Mạng máy tính",
+      subtopics,
+      key_points: [
+        { point: "Mạng hình sao nối mọi máy vào một switch trung tâm, dễ mở rộng", page: 11, verified: true },
+        { point: "Ý bịa không có trong sách", page: 11, verified: false },
+        { point: "Cáp xoắn đôi dùng đầu RJ45", page: 14, verified: true },
+        { point: "Ghi chú cuối bài", page: 30, verified: true },
+      ],
+      key_terms: [{ term: "Star topology (mạng hình sao)", definition: "...", page: 10, verified: true }],
+    })!;
+    const lines = mm.split("\n");
+    expect(lines[0]).toBe("mindmap");
+    expect(lines[1]).toBe("  root((Mạng máy tính))");
+    expect(lines).toContain("    Network Topologies");
+    expect(lines).toContain("    Cabling Copper");
+    expect(lines).toContain("      Star topology mạng hình sao");
+    expect(lines).toContain("      Mạng hình sao nối mọi máy vào một switch trung tâm");
+    expect(lines).toContain("    Ý khác");
+    expect(mm).not.toContain("bịa");
+  });
+  it("không có mục con → nhánh Ý chính / Khái niệm; không có ý nào → null", () => {
+    const mm = buildMindmap({ title: "A", subtopics: [], key_points: [{ point: "Một ý", page: 1 }], key_terms: [] })!;
+    expect(mm.split("\n").slice(2)).toEqual(["    Ý chính", "      Một ý"]);
+    expect(buildMindmap({ title: "A", subtopics: [], key_points: [], key_terms: [] })).toBeNull();
+  });
+  it("rút gọn nhãn", () => {
+    expect(shortLabel("TCP bảo đảm thứ tự: dùng số thứ tự")).toBe("TCP bảo đảm thứ tự");
+    expect(shortLabel("IPv4 là 32 bit.")).toBe("IPv4 là 32 bit");
+  });
+});
+import { keepFigures, mergeSameCaption, parseCaption } from "../src/services/figures.service.js";
+
+describe("hình minh họa trong sách (tìm bằng code)", () => {
+  it("đọc chú thích, kể cả chữ in giãn cách; bỏ câu trong thân bài", () => {
+    expect(parseCaption("F I G U R E 2 . 3 0 Keyboard and mouse PS/2 ports")).toBe("Hình 2.30: Keyboard and mouse PS/2 ports");
+    expect(parseCaption("F I G U R E 3 . 1 0 Landscape mode")).toBe("Hình 3.10: Landscape mode");
+    expect(parseCaption("F I G U R E 3 . 3 A docking station")).toBe("Hình 3.3: A docking station");
+    expect(parseCaption("Figure 4-2: The OSI model")).toBe("Hình 4-2: The OSI model");
+    expect(parseCaption("FIGURE 1.1")).toBe("Hình 1.1");
+    expect(parseCaption("Figure 2.34 shows a typical wireless optical mouse.")).toBeNull();
+    expect(parseCaption("Figure 2.32.")).toBeNull();
+    expect(parseCaption("The figure below")).toBeNull();
+  });
+  it("bỏ ảnh nhỏ, ảnh phủ cả trang, dải trang trí; gộp mảnh sát nhau", () => {
+    const figs = keepFigures([
+      { x: 0.2, y: 0.5, w: 0.3, h: 0.2 },
+      { x: 0.505, y: 0.5, w: 0.3, h: 0.2 }, // mảnh ghép sát bên → gộp
+      { x: 0.1, y: 0.05, w: 0.05, h: 0.05 }, // biểu tượng
+      { x: 0, y: 0, w: 1, h: 1 }, // trang scan
+      { x: 0, y: 0, w: 0.367, h: 1 }, // dải mép trang
+    ]);
+    expect(figs).toHaveLength(1);
+    expect(figs[0].x).toBeCloseTo(0.2);
+    expect(figs[0].w).toBeCloseTo(0.605);
+  });
+  it("2 ảnh chung 1 chú thích → 1 hình", () => {
+    const out = mergeSameCaption([
+      { x: 0.5, y: 0.14, w: 0.28, h: 0.5, caption: "Hình 3.8: Home screens" },
+      { x: 0.2, y: 0.15, w: 0.28, h: 0.49, caption: "Hình 3.8: Home screens" },
+      { x: 0.2, y: 0.7, w: 0.5, h: 0.2, caption: null },
+    ]);
+    expect(out).toHaveLength(2);
+    expect(out[0].x).toBeCloseTo(0.2);
+    expect(out[0].w).toBeCloseTo(0.58);
+  });
+});

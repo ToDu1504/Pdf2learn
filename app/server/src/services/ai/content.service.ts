@@ -177,17 +177,6 @@ export async function gradeShortAnswer(question: Question, answer: string, userI
   });
 }
 
-export async function generateMindmap(title: string, summary: S.SummaryData, userId: number) {
-  const { mermaid } = await generateJson({
-    parts: [{ text: P.mindmapPrompt(title, JSON.stringify(summary)) }],
-    responseSchema: S.mindmapSchema,
-    parse: (raw) => S.MindmapZod.parse(raw),
-    userId,
-    feature: "mindmap",
-  });
-  return mermaid;
-}
-
 export async function readChapterExcerpts(src: ChapterSource, question: string, userId: number) {
   const res = await generateJson({
     parts: [...src.parts, { text: P.readChapterPrompt(question) }],
