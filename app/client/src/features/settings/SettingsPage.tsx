@@ -88,7 +88,7 @@ export function SettingsPage() {
               checked={s.auto_translate}
               onChange={(v) => save({ auto_translate: v })}
               label="Tự dịch trước toàn bộ PDF"
-              hint="Dịch bằng Google Dịch trên trình duyệt, không tốn lượt AI. Nếu Google đòi xác minh, cửa sổ Chrome sẽ bật lên để bạn giải CAPTCHA."
+              hint="Dịch bằng Google Dịch chạy ngầm trong app, không tốn lượt AI. Nếu Google đòi xác minh, cửa sổ xác minh sẽ hiện trong app để bạn giải CAPTCHA."
             />
           </div>
         </Section>

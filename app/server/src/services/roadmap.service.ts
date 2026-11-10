@@ -296,10 +296,31 @@ const AnnotateZod = z.object({
   ),
 });
 
+/** "Chapter 3 Computing Devices…" → số chương + phần tên. AI chỉ dịch phần tên; "Chương N: " do code ghép. */
+const CHAPTER_PREFIX = /^(?:chapter|chương|lesson|part|phần)\s+(\d+)\s*[:.\-–—]?\s*/i;
+export function splitChapterTitle(title: string) {
+  const m = CHAPTER_PREFIX.exec(title.trim());
+  return m ? { no: Number(m[1]), name: title.trim().slice(m[0].length).trim() || title.trim() } : { no: null, name: title.trim() };
+}
+export function sectionTitle(source: string, translated: string | null) {
+  const { no, name } = splitChapterTitle(source);
+  const t = translated ? splitChapterTitle(translated).name : null;
+  // AI trả lại nguyên tên tiếng Anh → vẫn ghép "Chương N" để ít nhất phần nhãn là tiếng Việt.
+  const body = t ?? name;
+  return no != null ? `Chương ${no}: ${body}` : body;
+}
+
+/** Bài bị cắt "(phần N)": AI hay bỏ hoặc đổi hậu tố → code giữ lại. */
+export function keepPart(original: string, translated: string | null) {
+  if (!translated) return original;
+  const part = /\(phần \d+\)\s*$/.exec(original)?.[0];
+  return part ? `${translated.replace(/\s*\(phần \d+\)\s*$/i, "")} ${part.trim()}` : translated;
+}
+
 function annotatePrompt(docTitle: string, plan: SectionPlan[]) {
   const outline = plan
     .map((s, si) =>
-      [`S${si} | "${s.source_title}" | tr.${s.from}-${s.to}`, ...s.lessons.map((l, li) => `  L${li} | "${l.source_title}"${l.title !== l.source_title ? ` [${l.title}]` : ""} | tr.${l.from}-${l.to}`)].join("\n"),
+      [`S${si} | "${splitChapterTitle(s.source_title).name}" | tr.${s.from}-${s.to}`, ...s.lessons.map((l, li) => `  L${li} | "${l.source_title}"${l.title !== l.source_title ? ` [${l.title}]` : ""} | tr.${l.from}-${l.to}`)].join("\n"),
     )
     .join("\n");
   return `
@@ -321,6 +342,7 @@ Với MỖI chặng S và MỖI bài L (trả về đúng chỉ số i), viết 
 export async function annotateRoadmap(doc: Pick<Document, "title" | "user_id">, plan: SectionPlan[]): Promise<{ plan: SectionPlan[]; ai: boolean }> {
   const fallback = plan.map((s) => ({
     ...s,
+    title: sectionTitle(s.source_title, null),
     lessons: s.lessons.map((l) => ({ ...l, est_minutes: l.est_minutes ?? Math.min(90, Math.max(10, len(l) * 4)) })),
   }));
   if (!plan.length) return { plan: fallback, ai: false };
@@ -342,13 +364,13 @@ export async function annotateRoadmap(doc: Pick<Document, "title" | "user_id">, 
         const byLesson = new Map((a?.lessons ?? []).map((l) => [l.i, l]));
         return {
           ...s,
-          title: pick(a?.title) ?? s.title,
+          title: sectionTitle(s.source_title, pick(a?.title)),
           description: pick(a?.description),
           lessons: s.lessons.map((l, li) => {
             const b = byLesson.get(li);
             return {
               ...l,
-              title: pick(b?.title) ?? l.title,
+              title: keepPart(l.title, pick(b?.title)),
               description: pick(b?.description),
               importance: b?.importance ?? "core",
               est_minutes: b?.est_minutes ? Math.min(120, Math.max(5, b.est_minutes)) : l.est_minutes,
@@ -361,6 +383,51 @@ export async function annotateRoadmap(doc: Pick<Document, "title" | "user_id">, 
     console.warn("[roadmap] AI lỗi, giữ tên mục gốc trong sách:", (err as Error).message.slice(0, 150));
     return { plan: fallback, ai: false };
   }
+}
+
+/**
+ * Lộ trình đã lưu nhưng lượt AI đặt tên lỗi (vd. Gemini 503 lúc tải lên) → tên vẫn là tiếng Anh của sách.
+ * Gọi lại annotateRoadmap trên đúng các dòng đang có: chỉ cập nhật tên/mô tả/core/phút, không đụng trang,
+ * bài giảng hay tiến độ. Trả về true nếu đã đặt tên xong.
+ */
+export async function retitleRoadmap(doc: Document): Promise<boolean> {
+  const sections = await RoadmapSection.findAll({ where: { document_id: doc.id }, order: [["order_index", "ASC"]] });
+  const chapters = await Chapter.findAll({ where: { document_id: doc.id }, order: [["order_index", "ASC"]] });
+  const rows = sections
+    .map((s) => ({ s, lessons: chapters.filter((c) => c.section_id === s.id) }))
+    .filter((r) => r.lessons.length);
+  if (!rows.length) return false;
+  const plan: SectionPlan[] = rows.map(({ s, lessons }) => ({
+    from: Math.min(...lessons.map((c) => c.start_page)),
+    to: Math.max(...lessons.map((c) => c.end_page)),
+    title: s.source_title || s.title,
+    source_title: s.source_title || s.title,
+    description: null,
+    lessons: lessons.map((c) => ({
+      from: c.start_page,
+      to: c.end_page,
+      title: c.title,
+      source_title: c.source_title || c.title,
+      description: null,
+      importance: "core",
+      est_minutes: c.est_minutes ?? null,
+    })),
+  }));
+  const { plan: named, ai } = await annotateRoadmap(doc, plan);
+  if (!ai) return false;
+  await sequelize.transaction(async (transaction) => {
+    for (const [si, { s, lessons }] of rows.entries()) {
+      const p = named[si];
+      await s.update({ title: p.title.slice(0, 250), description: p.description }, { transaction });
+      for (const [li, c] of lessons.entries()) {
+        const l = p.lessons[li];
+        await c.update({ title: l.title.slice(0, 250), description: l.description, importance: l.importance, est_minutes: l.est_minutes }, { transaction });
+      }
+    }
+    if (doc.roadmap_report) await doc.update({ roadmap_report: { ...doc.roadmap_report, ai: true } }, { transaction });
+  });
+  console.log(`[roadmap] doc ${doc.id}: đã đặt lại tên tiếng Việt cho ${rows.length} chặng, ${chapters.length} bài`);
+  return true;
 }
 
 /**

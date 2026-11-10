@@ -1,3 +1,4 @@
+import { appBrowserEnv } from "./appBrowser.js";
 import { execFile, spawn } from "node:child_process";
 import { existsSync } from "node:fs";
 import { copyFile, mkdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
@@ -85,6 +86,8 @@ function pyEnv() {
     PYTHONPATH: PY_HOOKS,
     VI_TRANSLATE_ROOT: root,
     PDF2LEARN_BROWSER: env.TRANSLATE_BROWSER,
+    // App desktop: dịch qua cửa sổ ẩn của app (CAPTCHA hiện trong app), không mở Chrome.
+    ...appBrowserEnv(),
   };
 }
 

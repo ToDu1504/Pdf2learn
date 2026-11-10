@@ -21,8 +21,8 @@ const MIN_PER_CHUNK = 2; // đo thực tế: ~107 giây / 10 trang qua Google tr
 
 /**
  * Dịch toàn bộ PDF sang tiếng Việt (giữ bố cục) ở nền rồi tải về 1 file.
- * Server dịch lần lượt từng cụm 10 trang qua Google trên trình duyệt (không tốn lượt AI);
- * Google đòi CAPTCHA thì cửa sổ Chrome bật lên để giải.
+ * Server dịch lần lượt từng cụm 10 trang qua Google Dịch chạy ngầm trong app (không tốn lượt AI);
+ * Google đòi CAPTCHA thì cửa sổ xác minh hiện trong app để giải.
  */
 export function FullTranslation({ documentId, title, open, onClose }: { documentId: number; title: string; open: boolean; onClose: () => void }) {
   const qc = useQueryClient();
@@ -61,8 +61,8 @@ export function FullTranslation({ documentId, title, open, onClose }: { document
       ) : (
         <div className="space-y-5 text-[15px]">
           <p className="text-slate-600 dark:text-slate-300">
-            Dịch lần lượt {data.total} cụm 10 trang, giữ nguyên bố cục, bằng Google Dịch trên trình duyệt (không tốn lượt AI). Nếu Google đòi xác minh,
-            cửa sổ Chrome sẽ bật lên: hãy giải CAPTCHA và để cửa sổ mở.
+            Dịch lần lượt {data.total} cụm 10 trang, giữ nguyên bố cục, bằng Google Dịch chạy ngầm trong app (không tốn lượt AI). Nếu Google đòi xác minh,
+            cửa sổ xác minh sẽ hiện trong app: giải CAPTCHA là app tự dịch tiếp.
           </p>
 
           <div>

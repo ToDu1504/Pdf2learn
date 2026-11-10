@@ -93,7 +93,7 @@ function TranslatedChunk({ documentId, pages, width, onUnavailable }: { document
           {d?.available && (
             <p className="mx-auto mt-1 max-w-sm text-[12px] text-slate-400">
               Dịch cả cụm trang {d.from}–{d.to}, giữ nguyên hình, bảng và bố cục. Lần sau mở lại ngay.
-              {phase === "translating" && d.unit === "page" && " Nếu cửa sổ trình duyệt bật lên đòi xác minh của Google, hãy hoàn tất để dịch tiếp."}
+              {phase === "translating" && d.unit === "page" && " Nếu cửa sổ xác minh của Google hiện lên, giải CAPTCHA là app tự dịch tiếp."}
             </p>
           )}
         </div>

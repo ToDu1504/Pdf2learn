@@ -455,3 +455,16 @@ describe("hình minh họa trong sách (tìm bằng code)", () => {
     expect(out[0].w).toBeCloseTo(0.58);
   });
 });
+describe("tên chặng", () => {
+  it("code ghép 'Chương N', AI chỉ dịch phần tên", async () => {
+    const { sectionTitle } = await import("../src/services/roadmap.service.js");
+    expect(sectionTitle("Chapter 1 Core Hardware Components", "Linh kiện phần cứng cốt lõi")).toBe("Chương 1: Linh kiện phần cứng cốt lõi");
+    expect(sectionTitle("Chapter 2: Peripherals", "Chương 2: Thiết bị ngoại vi")).toBe("Chương 2: Thiết bị ngoại vi");
+    expect(sectionTitle("Chapter 3 Networking", null)).toBe("Chương 3: Networking");
+    expect(sectionTitle("Introduction", "Giới thiệu")).toBe("Giới thiệu");
+    const { keepPart } = await import("../src/services/roadmap.service.js");
+    expect(keepPart("Audio and Video (phần 2)", "Âm thanh và video nâng cao")).toBe("Âm thanh và video nâng cao (phần 2)");
+    expect(keepPart("Audio (phần 1)", "Âm thanh (phần 1)")).toBe("Âm thanh (phần 1)");
+    expect(keepPart("Memory", null)).toBe("Memory");
+  });
+});

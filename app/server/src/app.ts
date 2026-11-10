@@ -9,6 +9,7 @@ import { migrate } from "./db/migrate.js";
 import { ensureLocalUser } from "./middlewares/auth.js";
 import { loadAppConfig } from "./config/appConfig.js";
 import { api } from "./routes/index.js";
+import { internalRoutes } from "./services/translate/appBrowser.js";
 import { errorHandler } from "./middlewares/error.js";
 import { hashFile, resumePendingDocuments } from "./jobs/processDocument.js";
 import { startAutoPrepare } from "./services/autoPrepare.service.js";
@@ -57,6 +58,7 @@ function watchParent() {
 export const app = express();
 app.use(cors({ origin: env.CLIENT_URL }));
 app.use(express.json({ limit: "1mb" }));
+app.use("/api/v1/internal", internalRoutes);
 app.use("/api/v1", api);
 app.use("/api", (_req, res) => res.status(404).json({ error: "Không tìm thấy endpoint" }));
 app.use(errorHandler);

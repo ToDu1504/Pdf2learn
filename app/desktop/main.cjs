@@ -60,7 +60,6 @@ if (!app.requestSingleInstanceLock()) {
 /** @type {import("node:child_process").ChildProcess | null} */ let server = null;
 let serverUrl = "";
 let quitting = false;
-let trayHintShown = false;
 const PID_FILE = path.join(DATA_DIR, "server.pid");
 
 // Nhật ký của tiến trình chính (bản cài không có cửa sổ dòng lệnh): data/electron/desktop.log
@@ -160,6 +159,23 @@ async function startServer() {
       quit();
     }
   });
+  // Engine dịch (Python → server) nhờ app tải Google Dịch trong cửa sổ ẩn; lần lượt từng lượt.
+  server.on("message", (m) => {
+    if (!m || m.type !== "gt") return;
+    googleQueue = googleQueue
+      .then(() => googleTranslate(m.params))
+      .then(
+        (text) => ({ type: "gt-result", id: m.id, text }),
+        (err) => ({ type: "gt-result", id: m.id, error: String(err && err.message ? err.message : err) }),
+      )
+      .then((reply) => {
+        try {
+          server?.send(reply);
+        } catch {
+          /* server đã tắt */
+        }
+      });
+  });
   // Server nhờ mã hóa/giải mã Gemini API key bằng safeStorage (gắn với tài khoản Windows).
   server.on("message", (m) => {
     if (!m || m.type !== "secret") return;
@@ -210,6 +226,116 @@ async function stopServer() {
   fs.rmSync(PID_FILE, { force: true });
 }
 
+/* ---------------- Google Dịch trong app (thay cho Chrome của engine dịch) ---------------- */
+
+const GOOGLE_ENDPOINT = "https://translate.google.com/m";
+const GOOGLE_PARTITION = "persist:google-translate"; // cookie riêng: giải CAPTCHA một lần, nhớ lâu
+const VERIFY_TIMEOUT_MS = 10 * 60_000; // như engine gốc (HUMAN_VERIFICATION_TIMEOUT)
+const LOAD_TIMEOUT_MS = 60_000; // không có kết quả, không có CAPTCHA → coi là lỗi mạng
+// Giống PAGE_STATE_JS / page_verdict của VI-Translate (pdf2zh/google_browser.py).
+const PAGE_STATE_JS = `(() => {
+  const result = document.querySelector('.result-container, .t0');
+  return { url: location.href, result: result ? result.textContent : null, body: result ? '' : (document.body ? document.body.innerText : '') };
+})()`;
+
+let googleQueue = Promise.resolve();
+/** @type {BrowserWindow | null} */ let googleWin = null;
+
+function pageVerdict(state, params) {
+  let url;
+  try {
+    url = new URL(state.url || "");
+  } catch {
+    return ["loading", ""];
+  }
+  const body = String(state.body || "").toLowerCase();
+  if ((url.hostname === "www.google.com" || url.hostname === "google.com") && url.pathname.startsWith("/sorry/")) return ["verification", ""];
+  if (state.result == null && body.includes("our systems have detected unusual traffic")) return ["verification", ""];
+  if (url.hostname !== "translate.google.com" || url.pathname !== "/m") return ["loading", ""];
+  if (["q", "sl", "tl"].some((k) => url.searchParams.get(k) !== params[k])) return ["loading", ""];
+  if (typeof state.result === "string" && state.result.trim()) return ["result", state.result];
+  return ["loading", ""];
+}
+
+function googleWindow() {
+  if (googleWin && !googleWin.isDestroyed()) return googleWin;
+  googleWin = new BrowserWindow({
+    width: 760,
+    height: 680,
+    show: false,
+    parent: win ?? undefined,
+    title: "Google cần xác minh: giải CAPTCHA để dịch tiếp",
+    icon: path.join(ASSETS, "icon-256.png"),
+    autoHideMenuBar: true,
+    minimizable: false,
+    webPreferences: { partition: GOOGLE_PARTITION, contextIsolation: true, sandbox: true, backgroundThrottling: false },
+  });
+  // Google thấy một Chrome bình thường, không phải "Electron".
+  googleWin.webContents.setUserAgent(app.userAgentFallback.replace(/\s(Electron|pdf2learn)\/\S+/gi, ""));
+  googleWin.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
+  googleWin.on("page-title-updated", (e) => e.preventDefault());
+  // Đóng cửa sổ xác minh = bỏ qua lượt này (ẩn đi, không hủy cửa sổ để giữ phiên).
+  googleWin.on("close", (e) => {
+    if (quitting) return;
+    e.preventDefault();
+    googleWin?.hide();
+  });
+  googleWin.on("closed", () => (googleWin = null));
+  return googleWin;
+}
+
+function showVerification(w) {
+  if (win && !win.isDestroyed()) {
+    if (win.isMinimized()) win.restore();
+    win.show();
+    const b = win.getBounds();
+    const [ww, wh] = w.getSize();
+    w.setPosition(Math.round(b.x + (b.width - ww) / 2), Math.round(b.y + (b.height - wh) / 2));
+  }
+  w.show();
+  w.focus();
+  w.flashFrame(true);
+}
+
+/** Một lượt dịch: tải trang Google Dịch trong cửa sổ ẩn, đọc kết quả; CAPTCHA → hiện cửa sổ cho người dùng giải. */
+async function googleTranslate(params) {
+  if (quitting) throw new Error("App đang thoát");
+  const w = googleWindow();
+  const url = `${GOOGLE_ENDPOINT}?${new URLSearchParams(params)}`;
+  w.webContents.loadURL(url).catch(() => {}); // chuyển hướng/hủy tải: trạng thái trang đọc bên dưới
+  const started = Date.now();
+  let verifying = false;
+  for (;;) {
+    await new Promise((r) => setTimeout(r, 400));
+    if (quitting || w.isDestroyed()) throw new Error("App đang thoát");
+    let state = null;
+    try {
+      state = await w.webContents.executeJavaScript(PAGE_STATE_JS, true);
+    } catch {
+      /* trang đang chuyển */
+    }
+    const [verdict, text] = state ? pageVerdict(state, params) : ["loading", ""];
+    if (verdict === "result") {
+      if (verifying) {
+        w.hide();
+        log("Google đã xác minh xong, dịch tiếp");
+      }
+      return text;
+    }
+    if (verdict === "verification" && !verifying) {
+      verifying = true;
+      log("Google đòi xác minh: hiện cửa sổ CAPTCHA trong app");
+      showVerification(w);
+    }
+    if (verifying && !w.isVisible()) throw new Error("Đã đóng cửa sổ xác minh Google");
+    const limit = verifying ? VERIFY_TIMEOUT_MS : LOAD_TIMEOUT_MS;
+    if (Date.now() - started > limit) {
+      if (verifying) w.hide();
+      throw new Error(verifying ? "Hết thời gian chờ xác minh Google" : "Không tải được Google Dịch");
+    }
+  }
+}
+
 /* ---------------- cửa sổ + khay ---------------- */
 
 function showWindow() {
@@ -245,19 +371,13 @@ function createWindow() {
       void shell.openExternal(url);
     }
   });
-  // Đóng cửa sổ = thu xuống khay; việc soạn/dịch nền vẫn chạy.
+  // Đóng cửa sổ = thoát hẳn: dừng server, việc soạn/dịch nền và Chrome/Python của engine dịch.
+  // Lần mở sau app tự làm tiếp phần còn dang dở.
   win.on("close", (e) => {
     if (quitting) return;
     e.preventDefault();
     win?.hide();
-    if (!trayHintShown && tray) {
-      trayHintShown = true;
-      tray.displayBalloon({
-        iconType: "info",
-        title: "Pdf2Learn vẫn đang chạy",
-        content: "App thu xuống khay để tiếp tục soạn bài và dịch ở nền. Bấm biểu tượng để mở lại, chuột phải → Thoát để tắt hẳn.",
-      });
-    }
+    void quit();
   });
   win.on("closed", () => (win = null));
   void win.loadURL(`${serverUrl}/app`);

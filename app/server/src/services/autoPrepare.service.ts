@@ -1,6 +1,7 @@
 import { Chapter, Document, UserSettings } from "../models/index.js";
 import { availableModels, nextQuotaReset, QuotaExhaustedError } from "./ai/gemini.client.js";
 import { analyzeFrom, isAnalyzing } from "./chapterAnalysis.service.js";
+import { retitleRoadmap } from "./roadmap.service.js";
 import { fullStatus, isPdfTranslatorInstalled, startFullTranslation } from "./translate/pdfTranslate.service.js";
 
 /**
@@ -58,6 +59,11 @@ export async function kickAutoPrepare() {
   running = true;
   let done = 0;
   try {
+    // Tên bài còn tiếng Anh vì lượt AI đặt tên lỗi lúc tải lên → thử lại (1 lượt/tài liệu, mỗi vòng 30 phút).
+    for (const doc of await Document.findAll({ where: { status: "done" } })) {
+      if (doc.roadmap_report?.ai !== false || !availableModels().length) continue;
+      await retitleRoadmap(doc).catch((err) => console.warn(`[auto] đặt tên lộ trình doc ${doc.id} lỗi:`, (err as Error).message.slice(0, 150)));
+    }
     for (;;) {
       if (availableModels().length <= RESERVE_MODELS) {
         console.log(`[auto] tạm nghỉ soạn trước: chừa lượt Gemini còn lại cho việc bạn đang làm; chạy tiếp sau khi hạn mức reset`);
