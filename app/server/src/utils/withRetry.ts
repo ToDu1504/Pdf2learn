@@ -8,6 +8,17 @@ export function isDailyQuotaError(err: unknown) {
   return e?.status === 429 && /per ?day|PerDay|daily/i.test(e.message ?? "");
 }
 
+/**
+ * Lỗi mạng / model treo (không có mã HTTP): "fetch failed", hết thời gian chờ, mất kết nối.
+ * Coi là lỗi tạm thời của model đó → chuyển model dự phòng thay vì dừng hẳn.
+ */
+export function isNetworkError(err: unknown) {
+  const e = err as ApiLikeError & { name?: string; code?: string; cause?: { code?: string; message?: string } };
+  if (e?.status) return false;
+  const text = `${e?.name ?? ""} ${e?.code ?? ""} ${e?.message ?? ""} ${e?.cause?.code ?? ""} ${e?.cause?.message ?? ""}`;
+  return /fetch failed|terminated|timed? ?out|timeout|abort|socket|ECONNRESET|ECONNREFUSED|ETIMEDOUT|ENOTFOUND|EAI_AGAIN|UND_ERR/i.test(text);
+}
+
 /** Gemini gợi ý thời gian chờ ("Please retry in 31.2s" / "retryDelay":"31s"). */
 function suggestedDelayMs(err: unknown) {
   const m = /retry in ([\d.]+)s|"retryDelay":\s*"(\d+)s"/i.exec((err as ApiLikeError)?.message ?? "");

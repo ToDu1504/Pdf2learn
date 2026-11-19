@@ -7,7 +7,7 @@ import path from "node:path";
 import { sm2 } from "../src/services/srs.service.js";
 import { buildRanges, cutChapterPdf, fixedRanges, readPdfMeta, toDocumentPage, type OutlineNode } from "../src/services/pdf.service.js";
 import { AnalysisZod, QuizZod, MindmapZod } from "../src/services/ai/schemas.js";
-import { isDailyQuotaError, withRetry } from "../src/utils/withRetry.js";
+import { isDailyQuotaError, isNetworkError, withRetry } from "../src/utils/withRetry.js";
 
 describe("sm2", () => {
   const fresh = { ease_factor: 2.5, interval_days: 0, repetitions: 0 };
@@ -112,6 +112,12 @@ describe("quota", () => {
     expect(isDailyQuotaError(daily)).toBe(true);
     expect(isDailyQuotaError(minute)).toBe(false);
     expect(isDailyQuotaError({ status: 500, message: "per day" })).toBe(false);
+  });
+  it("nhận ra lỗi mạng / model treo (không có mã HTTP)", () => {
+    expect(isNetworkError(new TypeError("fetch failed"))).toBe(true);
+    expect(isNetworkError({ message: "x", cause: { code: "UND_ERR_HEADERS_TIMEOUT" } })).toBe(true);
+    expect(isNetworkError({ status: 400, message: "fetch failed" })).toBe(false);
+    expect(isNetworkError(new Error("JSON không hợp lệ"))).toBe(false);
   });
   it("không retry khi hết hạn mức ngày", async () => {
     let calls = 0;

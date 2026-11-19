@@ -1,7 +1,7 @@
 import { GoogleGenAI, FileState, ThinkingLevel, type GenerateContentResponseUsageMetadata, type Part } from "@google/genai";
 import { env } from "../../config/env.js";
 import { AiUsageLog, type Chapter } from "../../models/index.js";
-import { isDailyQuotaError, withRetry } from "../../utils/withRetry.js";
+import { isDailyQuotaError, isNetworkError, withRetry } from "../../utils/withRetry.js";
 import { HttpError } from "../../utils/HttpError.js";
 import { cutChapterPdf } from "../pdf.service.js";
 
@@ -105,9 +105,10 @@ export async function withModelFallback<T>(fn: (model: string) => Promise<T>): P
         console.warn(`[ai] ${model} ${status === 404 ? "không dùng được" : "hết hạn mức ngày"}, chuyển model dự phòng`);
         continue;
       }
-      if (status === 503 || status === 500) {
-        // Model đang quá tải (đã thử lại vài lần): dùng model dự phòng cho lượt này, không đánh dấu hết lượt.
-        console.warn(`[ai] ${model} đang quá tải (${status}), thử model dự phòng`);
+      if (status === 503 || status === 500 || isNetworkError(err)) {
+        // Model đang quá tải (đã thử lại vài lần) hoặc treo / lỗi mạng: dùng model dự phòng cho lượt này,
+        // không đánh dấu hết lượt.
+        console.warn(`[ai] ${model} ${status ? `đang quá tải (${status})` : `không phản hồi (${(err as Error).message})`}, thử model dự phòng`);
         overloaded = err;
         continue;
       }
